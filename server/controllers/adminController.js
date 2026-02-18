@@ -61,7 +61,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
 
     const totalRevenueAllTimeQuery = await database.query(
-        "SELECT SUM(total_price) FRO orders"
+        "SELECT SUM(total_price) FROM orders"
     );
     const totalRevenueAllTime = parseFloat(totalRevenueAllTimeQuery.rows[0].sum || 0);
 
@@ -88,14 +88,14 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
 
     // Today's Revenue
     const todayRevenueQuery = await database.query(
-        "SELECT SUM(total_price) FROM orders WHERE created_at::data = $1",
+        "SELECT SUM(total_price) FROM orders WHERE created_at::date = $1",
         [todayDate]
     );
     const todayRevenue = parseFloat(todayRevenueQuery.rows[0].sum || 0);
 
     // Yesterday's Revenue
     const yesterdayRevenueQuery = await database.query(
-       "SELECT SUM(total_price) FROM orders WHERE created_at::data = $1",
+       "SELECT SUM(total_price) FROM orders WHERE created_at::date = $1",
         [yesterdayDate]
     );
     const yesterdayRevenue = parseFloat(yesterdayRevenueQuery.rows[0].sum || 0);
@@ -147,7 +147,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const lowStockProducts = lowStockProductQuery.rows;
 
     // Revenuew Growth Rate(%)
-    const lastMonthRevenueQuery = await database(
+    const lastMonthRevenueQuery = await database.query(
         `SELECT SUM(total_price) AS total
         FROM orders 
         WHERE created_at BETWEEN $1 AND $2`,
@@ -163,13 +163,13 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
 
     // New Users this Month
     const newUsersThisMonthQuery = await database.query(
-        "SELECT COUNT(*) FROM users WHERE created_at >= $1 role = $2",
+        "SELECT COUNT(*) FROM users WHERE created_at >= $1 AND role = $2",
         [currentMonthStart, "User"]
     );
     const newUsersThisMonth = parseInt(newUsersThisMonthQuery.rows[0].count) || 0;
 
     // Final Response
-    res.status(2000).json({
+    res.status(200).json({
         success: true,
         message: "Dashboard Stats Fetched Successfully",
         totalRevenueAllTime,

@@ -23,9 +23,9 @@ router.delete("/admin/delete/:productId",isAuthenticated, isAuthorized("Admin"),
 
 router.get("/singleProduct/:productId", isAuthenticated, fetchSingleProduct);
 
-router.put("/post-new/review/productId", isAuthenticated, postProductReview);
+router.put("/post-new/review/:productId", isAuthenticated, postProductReview);
 
-router.delete("/delete/review/productId", isAuthenticated, deleteReview);
+router.delete("/delete/review/:productId", isAuthenticated, deleteReview);
 
 router.post("/ai-search", isAuthenticated, fetchAIFilteredProducts);
 

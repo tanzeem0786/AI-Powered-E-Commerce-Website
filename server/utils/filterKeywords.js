@@ -79,6 +79,6 @@ export const filterKeywords = (query) => {
         "10",
     ]);
 
-    return query.toLowerCase().replacee(/[^\w\s]/g, "").split(/\s+/).filter(word => !stopWords.has(word)).map(word => `%${word}%`);
+    return query.toLowerCase().replace(/[^\w\s]/g, "").split(/\s+/).filter(word => !stopWords.has(word)).map(word => `%${word}%`);
 
 };

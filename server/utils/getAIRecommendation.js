@@ -3,7 +3,7 @@ import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
 //5 hours 17 mins
 export async function getAIRecommendation(req, res, userPrompt, products) {
     const API_KEY = process.env.GEMINI_API_KEY;
-    const URL = "URL";
+    const URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`;
 
     try {
         const geminiPrompt = `

@@ -63,7 +63,7 @@ export const fetchAllProducts = catchAsyncErrors(async (req, res, next) => {
     if (price) {
         const [minPrice, maxPrice] = price.split("-");
         if (minPrice && maxPrice) {
-            conditions.push(`price BETWEEN Rs.${(index)} AND Rs.${(index + 1)}`);
+            conditions.push(`price BETWEEN $${(index)} AND $${(index + 1)}`);
             values.push(minPrice, maxPrice);
             index += 2;
         }
@@ -71,21 +71,21 @@ export const fetchAllProducts = catchAsyncErrors(async (req, res, next) => {
 
     //filter products by category
     if (category) {
-        conditions.push(`category ILIKE Rs.${index}`);
+        conditions.push(`category ILIKE $${index}`);
         values.push(`%${category}%`);
         index++;
     }
 
     //filter products by rating 
     if (ratings) {
-        conditions.push(`ratings >= Rs.${index}`);
+        conditions.push(`ratings >= $${index}`);
         values.push(ratings);
         index++;
     }
 
     //Add Search query
     if (search) {
-        conditions.push(`p.name ILIKE Rs.${index} OR p.description ILIKE Rs.${index}`);
+        conditions.push(`p.name ILIKE $${index} OR p.description ILIKE $${index}`);
         values.push(`%${search}%`);
         index++;
     }
@@ -100,17 +100,16 @@ export const fetchAllProducts = catchAsyncErrors(async (req, res, next) => {
 
     const totalProducts = parseInt(totalProductsResult.rows[0].count);
 
-    paginationPlaceholders.limit = `Rs.${index}`;
+    paginationPlaceholders.limit = `$${index}`;
     values.push(limit);
     index++;
 
-    paginationPlaceholders.offset = `Rs.${index}`;
+    paginationPlaceholders.offset = `$${index}`;
     values.push(offset);
     index++;
 
     //Fetch With Reviews
-    const query = `
-    SELECT p.*, COUNT(r.id) AS review_count FROM products p LEFT JOIN reviews r ON p.id = r.product_id ${whereClause} GROUP BY p.id ORDER BY p.created_at DESC LIMIT ${paginationPlaceholders.limit} OFFSET ${paginationPlaceholders.offset}`;
+    const query = `SELECT p.*, COUNT(r.id) AS review_count FROM products p LEFT JOIN reviews r ON p.id = r.product_id ${whereClause} GROUP BY p.id ORDER BY p.created_at DESC LIMIT ${paginationPlaceholders.limit} OFFSET ${paginationPlaceholders.offset}`;
 
     const result = await database.query(query, values);
 
@@ -189,34 +188,12 @@ export const deleteProduct = catchAsyncErrors(async (req, res, next) => {
     });
 });
 
-// 4 hours 26 mins approx.
+// 4 hours 26 mins approx. 
 export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
 
     const { productId } = req.params;
 
-    const result = await database.query(
-        `SELECT p.*, 
-        COALESCE(
-        json_agg(
-        json_build_object(
-            'review_id', r.id,
-            'rating', r.rating,
-            'comment', r.comment,
-            'reviewer', json_build_object(
-                'id', u.id,
-                'name', u.name,
-                'avatar', u.avatar,
-                )
-            )
-        )
-        FILTER (WHERE r.id IS NOT NULL), '[]'    
-        )      
-        AS reviews FROM products p
-        LEFT JOIN reviews r ON p.id = r.product_id
-        LEFT JOIN users u ON r.user_id = u.id
-        WHERE p.id = $1
-        GROUP BY p.id
-        `, [productId]
+    const result = await database.query(`SELECT p.*, COALESCE(json_agg(json_build_object('review_id', r.id, 'rating', r.rating,'comment', r.comment, 'reviewer', json_build_object( 'id', u.id,'name', u.name, 'avatar', u.avatar) )) FILTER (WHERE r.id IS NOT NULL), '[]'     )      AS reviews FROM products p LEFT JOIN reviews r ON p.id = r.product_id LEFT JOIN users u ON r.user_id = u.id WHERE p.id = $1 GROUP BY p.id `, [productId]
     );
     res.status(200).json({
         success: true,
@@ -267,7 +244,7 @@ export const postProductReview = catchAsyncErrors(async (req, res, next) => {
     let review;
     if (isAlreadyReviewed.rows.length > 0) {
         review = await database.query(
-            "UPDATE reivews SET rating = $1, comment = $2 WHERE product_id = $3 AND user_id = $4 RETURNING *",
+            "UPDATE reviews SET rating = $1, comment = $2 WHERE product_id = $3 AND user_id = $4 RETURNING *",
             [rating, comment, productId, req.user.id]
         );
     } else {
