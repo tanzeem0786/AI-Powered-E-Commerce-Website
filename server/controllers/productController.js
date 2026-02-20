@@ -4,6 +4,7 @@ import ErrorHandler from "../middlewares/errorMiddleware.js";
 import { v2 as cloudinary } from 'cloudinary';
 import { filterKeywords } from "../utils/filterKeywords.js";
 import { getAIRecommendation } from "../utils/getAIRecommendation.js";
+import { priceConversion } from "../utils/priceConversion.js";
 
 export const createProduct = catchAsyncErrors(async (req, res, next) => {
     const { name, description, price, category, stock } = req.body;
@@ -11,6 +12,11 @@ export const createProduct = catchAsyncErrors(async (req, res, next) => {
     if (!name || !description || !price || !category || !stock) {
         return next(new ErrorHandler("Please Provide Complete Product Details!", 400));
     }
+    const priceInPaise = priceConversion(price); // convert price in PAISE
+    if (!priceInPaise) {
+        return next(new ErrorHandler("Invalid Price. and Price Should be Greater Than 0 Rs.", 400));
+    }
+
     let uploadedImages = [];
     if (req.files && req.files.images) {
         const images = Array.isArray(req.files.images) ? req.files.images : [req.files.images];
@@ -26,9 +32,10 @@ export const createProduct = catchAsyncErrors(async (req, res, next) => {
             });
         }
     }
+
     const product = await database.query(
         "INSERT INTO products (name, description, price, category, stock, images, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *",
-        [name, description, price, category, stock, JSON.stringify(uploadedImages), created_by]
+        [name, description, priceInPaise, category, stock, JSON.stringify(uploadedImages), created_by]
     );
 
     res.status(201).json({
@@ -146,9 +153,13 @@ export const updateProduct = catchAsyncErrors(async (req, res, next) => {
     if (product.rows.length === 0) {
         return next(new ErrorHandler("Product Not Found!", 404));
     }
+    const priceInPaise = priceConversion(price); // convert price in PAISE
+    if (!priceInPaise) {
+        return next(new ErrorHandler("Invalid Price. and Price Should be Greater Than 0 Rs.", 400));
+    }
     const result = await database.query(
         "UPDATE products SET name = $1, description = $2, price = $3, category = $4, stock = $5 WHERE id = $6 RETURNING *",
-        [name, description, price, category, stock, productId]
+        [name, description, priceInPaise, category, stock, productId]
     );
 
     res.status(200).json({
@@ -193,7 +204,22 @@ export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
 
     const { productId } = req.params;
 
-    const result = await database.query(`SELECT p.*, COALESCE(json_agg(json_build_object('review_id', r.id, 'rating', r.rating,'comment', r.comment, 'reviewer', json_build_object( 'id', u.id,'name', u.name, 'avatar', u.avatar) )) FILTER (WHERE r.id IS NOT NULL), '[]'     )      AS reviews FROM products p LEFT JOIN reviews r ON p.id = r.product_id LEFT JOIN users u ON r.user_id = u.id WHERE p.id = $1 GROUP BY p.id `, [productId]
+    const result = await database.query(`SELECT p.*, COALESCE(
+        json_agg(
+            json_build_object(
+                'review_id', r.id, 
+                'rating', r.rating,
+                'comment', r.comment, 
+                'reviewer', json_build_object( 
+                'id', u.id,
+                'name', u.name, 
+                'avatar', u.avatar
+                ) 
+            )
+        ) FILTER( WHERE r.id IS NOT NULL), '[]')
+          AS reviews FROM products p LEFT JOIN reviews r ON p.id = r.product_id 
+          LEFT JOIN users u ON r.user_id = u.id 
+          WHERE p.id = $1 GROUP BY p.id `, [productId]
     );
     res.status(200).json({
         success: true,
@@ -314,16 +340,16 @@ export const fetchAIFilteredProducts = catchAsyncErrors(async (req, res, next) =
         [keywords]
     );
     const filteredProducts = result.rows;
-    if(filteredProducts.length === 0) {
+    if (filteredProducts.length === 0) {
         return res.status(200).json({
             success: true,
             message: "No Products Found Matching Your Prompt.",
             product: [],
         });
     }
-    
+
     //STEP:2 AI Filtering
-    const {success, products} = await getAIRecommendation(req, res, userPrompt, filteredProducts);
+    const { success, products } = await getAIRecommendation(req, res, userPrompt, filteredProducts);
 
     res.status(200).json({
         success: success,
