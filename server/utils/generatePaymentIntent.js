@@ -1,24 +1,32 @@
 import Stripe from "stripe";
 import database from "../database/db.js";
 
+function getStripeClient() {
+    const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
 
-// 6:55
-const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
+    if (!stripeSecretKey) {
+        throw new Error("STRIPE_SECRET_KEY is not set. Check server/config/config.env and dotenv loading order.");
+    }
+
+    return new Stripe(stripeSecretKey);
+}
 
 export async function generatePaymentIntent(orderId, totalPrice) {
     try {
+        const stripe = getStripeClient();
         const paymentIntent = await stripe.paymentIntents.create({
-            amount: totalPrice * 100, // CONVERTING IN CENT
-            currency: "inr"
+            amount: totalPrice,
+            currency: "inr",
         });
+
         await database.query(
             "INSERT INTO payments (order_id, payment_type, payment_status, payment_intent_id) VALUES ($1, $2, $3, $4) RETURNING *",
             [orderId, "Online", "Pending", paymentIntent.client_secret]
         );
-        return { success: true, clientSecret: paymentIntent.client_secret };
 
+        return { success: true, clientSecret: paymentIntent.client_secret };
     } catch (error) {
-        console.error("Payment Error: ", error.message || error);
+        console.error("Payment Error:", error.message || error);
         return { success: false, message: "Payment Failed!" };
     }
 }

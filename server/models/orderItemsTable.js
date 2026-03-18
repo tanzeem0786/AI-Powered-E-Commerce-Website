@@ -8,7 +8,7 @@ export async function createOrderItemTable() {
                 order_id UUID NOT NULL, 
                 product_id UUID NOT NULL,
                 quantity INT NOT NULL CHECK (quantity > 0), 
-                price INT NOT NULL CHECK (price > 0), 
+                price NUMERIC(10,2) NOT NULL CHECK (price > 0), 
                 image TEXT NOT NULL, 
                 title TEXT NOT NULL, 
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, 
