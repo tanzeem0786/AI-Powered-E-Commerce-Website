@@ -1,9 +1,12 @@
-import app from "./app.js";
 import Stripe from 'stripe';
 import database from './database/db.js';
+import express from 'express';
 
 //6:43
-app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }),
+
+export const stripeSetup = (app) => {
+  
+    app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }),
     async (req, res,) => {
         const sig = req.headers["stripe-signature"];
         let event;
@@ -11,9 +14,9 @@ app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }),
             event = Stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET);
         } catch (error) {
             return res.status(400).send(`Webhook Error: ${error.message || error}`);
-        }
-        // Handling Event
-        if (event.type === "payment_intent.succeeded") {
+            }
+            // Handling Event
+            if (event.type === "payment_intent.succeeded") {
             const paymentIntent_client_secret = event.data.object.client_secret;
             try {
                 //Finding and Update Payment
@@ -47,3 +50,4 @@ app.use("/api/v1/payment/webhook", express.raw({ type: "application/json" }),
         }
         res.status(200).send({ received: true });
     });
+};
