@@ -40,17 +40,17 @@ const Navbar = () => {
             </button>
 
             {/* SEARCH OVERLAY */}
-            <button onClick={() => dispatch(toggleSearchBar)} className="p-2 rounded-lg hover:bg-secondary transition-colors" >
+            <button onClick={() => dispatch(toggleSearchBar())} className="p-2 rounded-lg hover:bg-secondary transition-colors" >
               <Search className="w-5 h-5 text-foreground" />
             </button>
 
             {/* USER PROFILE */}
-            <button onClick={() => dispatch(toggleAuthPopup)} className="p-2 rounded-lg hover:bg-secondary transition-colors" >
+            <button onClick={() => dispatch(toggleAuthPopup())} className="p-2 rounded-lg hover:bg-secondary transition-colors" >
               <User className="w-5 h-5 text-foreground" />
             </button>
 
             {/* CART */}
-            <button onClick={() => dispatch(toggleCart)} className="relative p-2 rounded-lg hover:bg-secondary transition-colors" >
+            <button onClick={() => dispatch(toggleCart())} className="relative p-2 rounded-lg hover:bg-secondary transition-colors" >
               <ShoppingCart className="w-5 h-5 text-foreground" />
               {
                 cartItemCount > 0 && (
