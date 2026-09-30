@@ -1,7 +1,7 @@
-import { Menu, User, ShoppingCart, Sun, Moon, Search } from "lucide-react";
+import { Menu, User, ShoppingCart, Sun, Moon, Search, Sparkles } from "lucide-react";
 import { useTheme } from "../../contexts/ThemeContext.jsx";
 import { useDispatch, useSelector } from "react-redux";
-import { toggleAuthPopup, toggleCart, toggleSearchBar, toggleSidebar } from '../../store/slices/popupSlice.js';
+import { toggleAIModal, toggleAuthPopup, toggleCart, toggleSearchBar, toggleSidebar } from '../../store/slices/popupSlice.js';
 
 const Navbar = () => {
   const { theme, toggleTheme } = useTheme();
@@ -42,6 +42,15 @@ const Navbar = () => {
             {/* SEARCH OVERLAY */}
             <button onClick={() => dispatch(toggleSearchBar())} className="p-2 rounded-lg hover:bg-secondary transition-colors" >
               <Search className="w-5 h-5 text-foreground" />
+            </button>
+
+            <button
+              onClick={() => dispatch(toggleAIModal())}
+              aria-label="Search products with AI"
+              title="Search with AI"
+              className="p-2 rounded-lg text-primary hover:bg-secondary transition-colors"
+            >
+              <Sparkles className="w-5 h-5" />
             </button>
 
             {/* USER PROFILE */}

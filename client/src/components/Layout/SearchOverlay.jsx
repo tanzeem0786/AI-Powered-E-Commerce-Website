@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { X, Search } from "lucide-react";
+import { X, Search, Sparkles } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { toggleSearchBar } from "../../store/slices/popupSlice";
+import { toggleAIModal, toggleSearchBar } from "../../store/slices/popupSlice";
 
 const SearchOverlay = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -55,6 +55,17 @@ const SearchOverlay = () => {
                   <p className="mt-6">Start typing to Search for Products</p>
                 </div>
 
+                <button
+                  type="button"
+                  onClick={() => {
+                    dispatch(toggleSearchBar());
+                    dispatch(toggleAIModal());
+                  }}
+                  className="mt-5 inline-flex items-center gap-2 rounded-lg border border-primary/30 px-4 py-2.5 text-sm font-semibold text-primary transition hover:bg-primary/10"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Try AI search
+                </button>
           </div>
         </div>
       </div>

@@ -11,6 +11,7 @@ import SearchOverlay from "./components/Layout/SearchOverlay";
 import CartSidebar from "./components/Layout/CartSidebar";
 import ProfilePanel from "./components/Layout/ProfilePanel";
 import LoginModal from "./components/Layout/LoginModal";
+import AISearchModal from "./components/Products/AISearchModal.jsx";
 import Footer from "./components/Layout/Footer";
 
 // Pages
@@ -46,6 +47,7 @@ const App = () => {
             <CartSidebar />
             <ProfilePanel />
             <LoginModal />
+            <AISearchModal />
             <Routes>
               <Route path="/" element={<Index />} />
               <Route path="/password/reset/:token" element={<ResetPassword />} />

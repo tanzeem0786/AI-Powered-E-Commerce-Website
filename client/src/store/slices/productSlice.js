@@ -29,6 +29,50 @@ export const fetchSingleProduct = createAsyncThunk(
   }
 );
 
+export const searchProductsWithAI = createAsyncThunk(
+  "product/searchWithAI",
+  async (userPrompt, thunkAPI) => {
+    try {
+      const response = await axiosInstance.post("/product/ai-search", { userPrompt });
+      const data = response.data;
+      if (data?.success !== true || !Array.isArray(data.product)) {
+        return thunkAPI.rejectWithValue({
+          kind: "invalid",
+          message: data?.message || "The AI returned an invalid product response. Please try again.",
+        });
+      }
+
+      const invalidProduct = data.product.some((product) =>
+        !product ||
+        typeof product.id !== "string" ||
+        typeof product.name !== "string" ||
+        !Number.isFinite(Number(product.price)) ||
+        !Number.isFinite(Number(product.stock))
+      );
+      if (invalidProduct) {
+        return thunkAPI.rejectWithValue({
+          kind: "invalid",
+          message: "The AI response included invalid product data. Please try a different prompt.",
+        });
+      }
+
+      const message = data.product.length === 0 && !/no product|no match/i.test(data.message || "")
+        ? "Try describing a different product, category, feature, or budget."
+        : data.message;
+      return { products: data.product, message };
+    } catch (error) {
+      const message = getErrorMessage(error, "AI search is temporarily unavailable.");
+      const status = error.response?.status;
+      const kind = status === 401 || status === 403
+        ? "auth"
+        : status === 429 || /quota|rate.?limit|429/i.test(message)
+          ? "quota"
+          : "api";
+      return thunkAPI.rejectWithValue({ kind, message });
+    }
+  }
+);
+
 export const submitProductReview = createAsyncThunk(
   "product/submitReview",
   async ({ productId, rating, comment }, thunkAPI) => {
@@ -74,6 +118,11 @@ const productSlice = createSlice({
     topRatedProducts: [],
     newProducts: [],
     aiSearching: false,
+    aiResults: [],
+    aiSearchError: null,
+    aiSearchRequestId: null,
+    aiSearchMessage: "",
+    aiSearchCompleted: false,
     isReviewDeleting: false,
     isPostingReview: false,
     productReviews: [],
@@ -118,6 +167,31 @@ const productSlice = createSlice({
         state.detailLoading = false;
         state.detailRequestId = null;
         state.detailError = action.payload || "Unable to load this product.";
+      })
+      .addCase(searchProductsWithAI.pending, (state, action) => {
+        state.aiSearching = true;
+        state.aiResults = [];
+        state.aiSearchError = null;
+        state.aiSearchMessage = "";
+        state.aiSearchCompleted = false;
+        state.aiSearchRequestId = action.meta.requestId;
+      })
+      .addCase(searchProductsWithAI.fulfilled, (state, action) => {
+        if (state.aiSearchRequestId !== action.meta.requestId) return;
+        state.aiSearching = false;
+        state.aiSearchRequestId = null;
+        state.aiResults = action.payload.products;
+        state.aiSearchMessage = action.payload.message || "";
+        state.aiSearchCompleted = true;
+      })
+      .addCase(searchProductsWithAI.rejected, (state, action) => {
+        if (state.aiSearchRequestId !== action.meta.requestId) return;
+        state.aiSearching = false;
+        state.aiSearchRequestId = null;
+        state.aiSearchError = action.payload || {
+          kind: "api",
+          message: action.error.message || "AI search is temporarily unavailable.",
+        };
       })
       .addCase(submitProductReview.pending, (state) => {
         state.isPostingReview = true;

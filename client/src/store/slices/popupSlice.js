@@ -27,6 +27,9 @@ const popupSlice = createSlice({
     },
     toggleAIModal(state) {
       state.isAIPopupOpen = !state.isAIPopupOpen;
+    },
+    closeAIModal(state) {
+      state.isAIPopupOpen = false;
     }
   },
 });
@@ -38,5 +41,6 @@ export const {
   toggleSearchBar,
   toggleCart,
   toggleAIModal,
+  closeAIModal,
 } = popupSlice.actions;
 export default popupSlice.reducer;
