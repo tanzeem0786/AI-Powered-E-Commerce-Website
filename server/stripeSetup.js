@@ -17,14 +17,17 @@ export const stripeSetup = (app) => {
             }
             // Handling Event
             if (event.type === "payment_intent.succeeded") {
-                const paymentIntent_client_secret = event.data.object.client_secret;
+                const paymentIntentId = event.data.object.id;
                 try {
-                    //Finding and Update Payment
-                    const updatePaymentStatus = "Paid";
+                    await database.query("BEGIN");
                     const paymentTableUpdateResult = await database.query(
-                        "UPDATE payments SET payment_status = $1 WHERE payment_intent_id = $2 RETURNING *",
-                        [updatePaymentStatus, paymentIntent_client_secret]
+                        "UPDATE payments SET payment_status = 'Paid' WHERE payment_intent_id = $1 AND payment_status <> 'Paid' RETURNING *",
+                        [paymentIntentId]
                     );
+                    if (paymentTableUpdateResult.rows.length === 0) {
+                        await database.query("ROLLBACK");
+                        return res.status(200).send({ received: true });
+                    }
                     await database.query(
                         "UPDATE orders SET paid_at = NOW() WHERE id = $1 RETURNING *",
                         [paymentTableUpdateResult.rows[0].order_id]
@@ -39,12 +42,17 @@ export const stripeSetup = (app) => {
 
                     // For Each Ordered Items, Reduce the product item 
                     for (const item of orderedItems) {
-                        await database.query(
-                            "UPDATE products SET stock = stock - $1 WHERE id = $2",
+                        const stockUpdate = await database.query(
+                            "UPDATE products SET stock = stock - $1 WHERE id = $2 AND stock >= $1",
                             [item.quantity, item.product_id]
                         );
+                        if (stockUpdate.rowCount !== 1) {
+                            throw new Error("Insufficient stock while completing payment.");
+                        }
                     }
+                    await database.query("COMMIT");
                 } catch (error) {
+                    await database.query("ROLLBACK");
                     return res.status(500).send(`Error Updating paid_at Timestamp in orders table`);
                 }
             }

@@ -20,7 +20,7 @@ export const errorMiddleware = (err, req, res, next) => {
     }
 
     if(err.name === "TokenExpiredError") {
-        const message = "JSON Web Token has expired! Try again."
+        err = new ErrorHandler("JSON Web Token has expired! Try again.", 401);
     }
 
     const errorMessage = err.errors ? Object.values(err.errors).map((error) => error.message).join(" ") : err.message;

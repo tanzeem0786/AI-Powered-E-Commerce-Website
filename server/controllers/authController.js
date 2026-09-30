@@ -15,14 +15,15 @@ export const register = catchAsyncErrors(async (req, res, next) => {
     if (!name || !email || !password) {
         return next(new ErrorHandler("Please Provide All Required Fields!", 400));
     }
-    if (!email.includes('@') || email[0] === '@') {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         return next(new ErrorHandler("Invalid Email!", 400));
     }
     if (password.length < 8 || password.length > 16) {
         return next(new ErrorHandler("Password Must be Between 8 and 16 Characters!", 400));
     }
     const isAlreadyRegistered = await database.query(
-        `SELECT * FROM users WHERE email = $1`, [email]
+        `SELECT * FROM users WHERE email = $1`, [normalizedEmail]
     );
     if (isAlreadyRegistered.rows.length > 0) {
         return next(new ErrorHandler("User is Already Registered!", 400));
@@ -30,7 +31,7 @@ export const register = catchAsyncErrors(async (req, res, next) => {
     const hashedpassword = await bcrypt.hash(password, 10);
     const user = await database.query(
         "INSERT INTO users (name, email, password) VALUES ($1, $2, $3) RETURNING *",
-        [name, email, hashedpassword]
+        [name.trim(), normalizedEmail, hashedpassword]
     );
     /*------ALTERNATE OPTION TO INSERT DATA(but is very risky for SQL injections)------*/
     // const user = await database.query(
@@ -45,7 +46,8 @@ export const login = catchAsyncErrors(async (req, res, next) => {
     if (!email || !password) {
         return next(new ErrorHandler("Please Provide all Fields!", 400));
     }
-    if (!email.includes('@')) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         return next(new ErrorHandler("Invalid Email!", 400));
     }
     if (password.length < 8 || password.length > 16) {
@@ -53,7 +55,7 @@ export const login = catchAsyncErrors(async (req, res, next) => {
     }
     const user = await database.query(
         "SELECT * FROM users WHERE email = $1",
-        [email]
+        [normalizedEmail]
     );
     if (user.rows.length === 0) {
         return next(new ErrorHandler("Invalid Email or Password!", 401));
@@ -78,6 +80,8 @@ export const logout = catchAsyncErrors(async (req, res, next) => {
     res.status(200).cookie("token", null, {
         expires: new Date(Date.now()),
         httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
     }).json({
         success: true,
         message: "Logged Out Successfully."
@@ -86,10 +90,8 @@ export const logout = catchAsyncErrors(async (req, res, next) => {
 
 export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
     const { email } = req.body;
-    const { frontendUrl } = req.query;
-
     const userResult = await database.query(
-        "SELECT * FROM users WHERE email = $1", [email]
+        "SELECT * FROM users WHERE email = $1", [email?.trim().toLowerCase()]
     );
 
     if (userResult.rows.length === 0) {
@@ -99,9 +101,9 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
     const user = userResult.rows[0];
     const { resetToken, hashedToken, resetPasswordExpireTime } = generateResetPasswordToken();
     await database.query(
-        "UPDATE users SET reset_password_token = $1, reset_password_expire = to_timestamp($2) WHERE email = $3", [hashedToken, resetPasswordExpireTime / 1000, email]
+        "UPDATE users SET reset_password_token = $1, reset_password_expire = to_timestamp($2) WHERE email = $3", [hashedToken, resetPasswordExpireTime / 1000, user.email]
     );
-    const resetPasswordUrl = `${frontendUrl}/password/reset/${resetToken}`;
+    const resetPasswordUrl = `${process.env.FRONTEND_URL}/password/reset/${resetToken}`;
     const message = generateEmailTemplate(resetPasswordUrl);
 
     try {
@@ -116,7 +118,7 @@ export const forgotPassword = catchAsyncErrors(async (req, res, next) => {
         });
     } catch (error) {
         await database.query(
-            "UPDATE users SET reset_password_token = NULL, reset_password_expire = NULL WHERE email = $1", [email]
+            "UPDATE users SET reset_password_token = NULL, reset_password_expire = NULL WHERE email = $1", [user.email]
         );
         return next(new ErrorHandler("Email Could not be Sent!", 500));
     }
@@ -147,7 +149,7 @@ export const resetPassword = catchAsyncErrors(async (req, res, next) => {
     const updatedUser = await database.query(
         "UPDATE users SET password = $1, reset_password_token = NULL, reset_password_expire = NULL WHERE id = $2 RETURNING *", [hashedPassword, user.rows[0].id]
     );
-    sendToken(updatedUser, 200, "Password Reset Successfully.", res);
+    sendToken(updatedUser.rows[0], 200, "Password Reset Successfully.", res);
 
 });
 
@@ -187,7 +189,8 @@ export const updateProfile = catchAsyncErrors(async(req, res, next) => {
     if(!name || !email) {
         return next(new ErrorHandler("Please Provide All Required Fields!",400));
     }
-    if(name.trim().length === 0 || email.trim().length === 0) {
+    const normalizedEmail = email.trim().toLowerCase();
+    if(name.trim().length === 0 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
         return next(new ErrorHandler("Name and Email Can't be Empty!",400));
     }
     let avatarData = {};
@@ -211,12 +214,12 @@ export const updateProfile = catchAsyncErrors(async(req, res, next) => {
     if(Object.keys(avatarData).length === 0) {
         user = await database.query(
             "UPDATE users SET name = $1, email = $2 WHERE id = $3 RETURNING *",
-            [name, email, req.user.id]
+            [name.trim(), normalizedEmail, req.user.id]
         );
     } else {
         user = await database.query(
             "UPDATE users SET name = $1, email = $2, avatar = $3 WHERE id = $4 RETURNING *",
-            [name, email, avatarData, req.user.id]
+            [name.trim(), normalizedEmail, JSON.stringify(avatarData), req.user.id]
         );
     }
 

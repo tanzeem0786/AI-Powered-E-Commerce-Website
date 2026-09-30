@@ -9,7 +9,7 @@ import { priceConversion } from "../utils/priceConversion.js";
 export const createProduct = catchAsyncErrors(async (req, res, next) => {
     const { name, description, price, category, stock } = req.body;
     const created_by = req.user.id;
-    if (!name || !description || !price || !category || !stock) {
+    if (!name || !description || !price || !category || stock === undefined || stock === null || !Number.isInteger(Number(stock)) || Number(stock) < 0) {
         return next(new ErrorHandler("Please Provide Complete Product Details!", 400));
     }
     const priceInPaise = priceConversion(price); // convert price in PAISE
@@ -144,7 +144,7 @@ export const fetchAllProducts = catchAsyncErrors(async (req, res, next) => {
 export const updateProduct = catchAsyncErrors(async (req, res, next) => {
     const { productId } = req.params;
     const { name, description, price, category, stock } = req.body;
-    if (!name || !description || !price || !category || !stock) {
+    if (!name || !description || !price || !category || stock === undefined || stock === null || !Number.isInteger(Number(stock)) || Number(stock) < 0) {
         return next(new ErrorHandler("Please Provide Complete Product Details!", 400));
     }
     const product = await database.query(
@@ -161,6 +161,9 @@ export const updateProduct = catchAsyncErrors(async (req, res, next) => {
         "UPDATE products SET name = $1, description = $2, price = $3, category = $4, stock = $5 WHERE id = $6 RETURNING *",
         [name, description, priceInPaise, category, stock, productId]
     );
+    if (result.rows.length === 0) {
+        return next(new ErrorHandler("Product Not Found!", 404));
+    }
 
     res.status(200).json({
         success: true,
@@ -221,6 +224,9 @@ export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
           LEFT JOIN users u ON r.user_id = u.id 
           WHERE p.id = $1 GROUP BY p.id `, [productId]
     );
+    if (result.rows.length === 0) {
+        return next(new ErrorHandler("Product Not Found!", 404));
+    }
     res.status(200).json({
         success: true,
         message: "Product Fetched Successfully.",
@@ -232,7 +238,7 @@ export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
 export const postProductReview = catchAsyncErrors(async (req, res, next) => {
     const { productId } = req.params;
     const { rating, comment } = req.body;
-    if (!rating || !comment) {
+    if (rating === undefined || rating === null || !comment?.trim() || Number(rating) < 0 || Number(rating) > 5) {
         return next(new ErrorHandler("Please Provide Rating and Comment!", 400));
     }
 
@@ -257,7 +263,7 @@ export const postProductReview = catchAsyncErrors(async (req, res, next) => {
         "SELECT * FROM products WHERE id = $1",
         [productId]
     );
-    if (product.rows[0].length === 0) {
+    if (product.rows.length === 0) {
         return next(new ErrorHandler("Product Not Found!", 404));
     }
 
@@ -285,10 +291,10 @@ export const postProductReview = catchAsyncErrors(async (req, res, next) => {
     );
     const newAvgRating = allReviews.rows[0].avg_rating;
     const updatedProduct = await database.query(
-        "UPDATE products SET ratings = $1 WHERE product_id = $2 RETURNING *",
+        "UPDATE products SET ratings = $1 WHERE id = $2 RETURNING *",
         [newAvgRating, productId]
     );
-    res.status(200).join({
+    res.status(200).json({
         success: true,
         message: "Review Posted Successfully.",
         review: review.rows[0],
@@ -314,10 +320,10 @@ export const deleteReview = catchAsyncErrors(async (req, res, next) => {
     );
     const newAvgRating = allReviews.rows[0].avg_rating;
     const updatedProduct = await database.query(
-        "UPDATE products SET ratings = $1 WHERE product_id = $2 RETURNING *",
+        "UPDATE products SET ratings = $1 WHERE id = $2 RETURNING *",
         [newAvgRating, productId]
     );
-    res.status(200).join({
+    res.status(200).json({
         success: true,
         message: "Your Review Has Been Deleted.",
         review: review.rows[0],
@@ -357,6 +363,3 @@ export const fetchAIFilteredProducts = catchAsyncErrors(async (req, res, next) =
         product: products,
     })
 });
-
-
-

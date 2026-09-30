@@ -8,6 +8,7 @@ import { createShippingInfoTable } from "../models/shippingInfoTable.js";
 
 export const createTables = async () => {
     try {
+        await database.query('CREATE EXTENSION IF NOT EXISTS pgcrypto');
         await createUserTable();
         await createProductsTable();
         await createOrdersTable();
@@ -17,6 +18,7 @@ export const createTables = async () => {
         await createProductReviewsTable();
         console.log("All Tables are Created Successfully.");
     } catch (error) {
-        console.error("Error Creating Tables!");
+        console.error("Error Creating Tables!", error);
+        throw error;
     }
-}
+};

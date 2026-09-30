@@ -55,10 +55,10 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const yesterdayDate = yesterday.toISOString().split("T")[0];
 
     const currentMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
-    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    const currentMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 1);
 
     const previousMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
-    const previousMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+    const previousMonthEnd = currentMonthStart;
 
     const totalRevenueAllTimeQuery = await database.query(
         "SELECT SUM(total_price) FROM orders"
@@ -135,7 +135,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const currentMonthSalesQuery = await database.query(
         `SELECT SUM(total_price) AS total
         FROM orders
-        WHERE created_at BETWEEN $1 AND $2`,
+        WHERE created_at >= $1 AND created_at < $2`,
         [currentMonthStart, currentMonthEnd]
     );
     const currentMonthSales = parseFloat(currentMonthSalesQuery.rows[0].total) || 0;
@@ -150,7 +150,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const lastMonthRevenueQuery = await database.query(
         `SELECT SUM(total_price) AS total
         FROM orders 
-        WHERE created_at BETWEEN $1 AND $2`,
+        WHERE created_at >= $1 AND created_at < $2`,
         [previousMonthStart, previousMonthEnd]
     );
     const lastMonthRevenue = parseFloat(lastMonthRevenueQuery.rows[0].total) || 0;
@@ -177,7 +177,10 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
         yesterdayRevenue: yesterdayRevenue / 100,
         totalUsersCount,
         orderStatusCount,
-        monthtlySales: monthtlySales / 100,
+        monthtlySales: monthtlySales.map((sale) => ({
+            ...sale,
+            totalSales: sale.totalSales / 100,
+        })),
         currentMonthSales: currentMonthSales / 100,
         topSellingProducts,
         lowStockProducts,

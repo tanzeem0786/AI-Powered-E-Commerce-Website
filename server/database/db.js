@@ -1,12 +1,18 @@
 import pkg from 'pg';
+import dotenv from 'dotenv';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const configPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../config/config.env');
+dotenv.config({ path: configPath });
 
 const {Client} = pkg;
 
 const database = new Client({
-    user: "postgres",
+    user: process.env.DB_USER,
     host: process.env.DB_HOST,
-    database: "mern_ecommerce_store",
-    password: "Taha@786",
+    database: process.env.DB_NAME,
+    password: String(process.env.DB_PASSWORD),
     port: process.env.DB_PORT,
 });
 

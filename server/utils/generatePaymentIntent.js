@@ -11,7 +11,7 @@ function getStripeClient() {
     return new Stripe(stripeSecretKey);
 }
 
-export async function generatePaymentIntent(orderId, totalPrice) {
+export async function generatePaymentIntent(orderId, totalPrice, databaseClient = database) {
     try {
         const stripe = getStripeClient();
         const paymentIntent = await stripe.paymentIntents.create({
@@ -19,9 +19,9 @@ export async function generatePaymentIntent(orderId, totalPrice) {
             currency: "inr",
         });
 
-        await database.query(
+        await databaseClient.query(
             "INSERT INTO payments (order_id, payment_type, payment_status, payment_intent_id) VALUES ($1, $2, $3, $4) RETURNING *",
-            [orderId, "Online", "Pending", paymentIntent.client_secret]
+            [orderId, "Online", "Pending", paymentIntent.id]
         );
 
         return { success: true, clientSecret: paymentIntent.client_secret };

@@ -1,4 +1,3 @@
-import { v2 as cloudinary } from 'cloudinary';
 import ErrorHandler from "../middlewares/errorMiddleware.js";
 import { catchAsyncErrors } from "../middlewares/catchAsyncErrors.js";
 import database from "../database/db.js";
@@ -27,38 +26,53 @@ export const placeNewOrder = catchAsyncErrors(async (req, res, next) => {
         return next(new ErrorHandler("Please Provide Complete Shipping Details.", 400));
     }
 
-    const items = Array.isArray(orderedItem) ? orderedItem : JSON.parse(orderedItem);
+    let items;
+    try {
+        items = Array.isArray(orderedItem) ? orderedItem : JSON.parse(orderedItem);
+    } catch {
+        return next(new ErrorHandler("Invalid Order Items.", 400));
+    }
     if (!items || items.length === 0) {
         return next(new ErrorHandler("No Items in Cart.", 400));
     }
 
-    const productIds = items.map((item) => item.product.id);
+    const productIds = [...new Set(items.map((item) => item.product?.id))];
+    if (productIds.some((id) => !id)) {
+        return next(new ErrorHandler("Invalid Product in Cart.", 400));
+    }
     const { rows: products } = await database.query(
         "SELECT id, price, stock, name FROM products WHERE id = ANY($1::uuid[])",
         [productIds]
     );
+    const requestedQuantities = new Map();
+    items.forEach((item) => {
+        requestedQuantities.set(item.product.id, (requestedQuantities.get(item.product.id) || 0) + Number(item.quantity));
+    });
+    const cartItems = [...requestedQuantities.entries()].map(([productId, quantity]) => ({
+        productId,
+        quantity,
+        item: items.find((cartItem) => cartItem.product.id === productId),
+    }));
     let total_price = 0;
     const values = [];
     const placeholders = [];
-    let productStock = products[0].stock;
     let hasError = false;
-    items.forEach((item, index) => {
+    cartItems.forEach(({ productId, quantity, item }, index) => {
         if (hasError) return; // Skip if error already found
-        const product = products.find((p) => p.id === item.product.id);
+        const product = products.find((p) => p.id === productId);
         if (!product) {
-            next(new ErrorHandler(`Product Not Found for ID: ${item.product.id}`, 404));
+            next(new ErrorHandler(`Product Not Found for ID: ${productId}`, 404));
             hasError = true;
             return;
         }
-        if (item.quantity > product.stock) {
+        if (!Number.isInteger(quantity) || quantity <= 0 || quantity > product.stock) {
             next(new ErrorHandler(`Only ${product.stock} Units Available for ${product.name}`, 400));
             hasError = true;
             return;
         }
-        const itemTotal = product.price * item.quantity;
+        const itemTotal = product.price * quantity;
         total_price += itemTotal;
-        values.push(null, product.id, item.quantity, product.price, item.product.images[0].url || "", product.name);
-        productStock -= item.quantity;
+        values.push(null, product.id, quantity, product.price, item.product.images?.[0]?.url || "", product.name);
 
         const offset = index * 6;
         placeholders.push(`($${offset + 1}, $${offset + 2}, $${offset + 3}, $${offset + 4}, $${offset + 5}, $${offset + 6})`);
@@ -66,9 +80,11 @@ export const placeNewOrder = catchAsyncErrors(async (req, res, next) => {
 
     if (hasError) return; // Don't proceed to create order
 
+    const subtotal = total_price;
     const tax = 2.5; // 2.5% TAX
     const shipping_price = total_price >= 50000 ? 0 : 10000; // shipping_price in INR in PAISE
-    total_price = Math.round(total_price + ((total_price * tax) / 100) + shipping_price);
+    const tax_price = Math.round((subtotal * tax) / 100);
+    total_price = subtotal + tax_price + shipping_price;
 
     if (!total_price) {
         return res.status(400).json({
@@ -77,45 +93,39 @@ export const placeNewOrder = catchAsyncErrors(async (req, res, next) => {
         });
     }
 
-    const orderResult = await database.query(
-        "INSERT INTO orders (buyer_id, total_price, tax_price, shipping_price) VALUES ($1, $2, $3, $4) RETURNING id",
-        [req.user.id, total_price, ((total_price * tax) / 100), shipping_price]
-    );
+    await database.query("BEGIN");
+    try {
+        const orderResult = await database.query(
+            "INSERT INTO orders (buyer_id, total_price, tax_price, shipping_price) VALUES ($1, $2, $3, $4) RETURNING id",
+            [req.user.id, total_price, tax_price, shipping_price]
+        );
 
-    const orderId = orderResult.rows[0].id;
-    for (let i = 0; i < values.length; i += 6) {
-        values[i] = orderId;
-    }
+        const orderId = orderResult.rows[0].id;
+        for (let i = 0; i < values.length; i += 6) values[i] = orderId;
 
-    if (placeholders.length > 0) {
         await database.query(
             `INSERT INTO order_items (order_id, product_id, quantity, price, image, title)
             VALUES ${placeholders.join(", ")} RETURNING *`,
             values
         );
-    }
-
-    await database.query(
-        `INSERT INTO shipping_info (order_id, full_name, state, city, country, address, pincode, phone) VALUES
-        ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
-        [orderId, full_name, state, city, country, address, pincode, phone]
-    );
-
-    const paymentResponse = await generatePaymentIntent(orderId, total_price);
-    if (!paymentResponse.success) {
-        return next(new ErrorHandler("Payment Failed Try Again!", 500));
-    }
-
-    await database.query(
-        "UPDATE products SET stock = $1 WHERE id = $2",
-        [productStock, products[0].id]
-    );
-    res.status(200).json({
+        await database.query(
+            `INSERT INTO shipping_info (order_id, full_name, state, city, country, address, pincode, phone) VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [orderId, full_name, state, city, country, address, pincode, phone]
+        );
+        const paymentResponse = await generatePaymentIntent(orderId, total_price, database);
+        if (!paymentResponse.success) throw new Error("Payment Failed");
+        await database.query("COMMIT");
+        return res.status(200).json({
         success: true,
         message: "Order Placed Successfully. Please Proceed to Payment.",
         paymentIntent: paymentResponse.clientSecret,
         total_price: total_price / 100,
-    });
+        });
+    } catch (error) {
+        await database.query("ROLLBACK");
+        return next(new ErrorHandler("Payment Failed Try Again!", 500));
+    }
 });
 
 // 7 hours 30 mins
@@ -144,10 +154,10 @@ export const fetchSingleOrder = catchAsyncErrors(async (req, res, next) => {
                     ) AS shipping_info FROM orders o
                     LEFT JOIN order_items oi ON o.id = oi.order_id
                     LEFT JOIN shipping_info s ON o.id = s.order_id
-                    WHERE o.id = $1
+                    WHERE o.id = $1 AND o.buyer_id = $2
                     GROUP BY o.id, s.id;
 `,
-        [orderId]);
+        [orderId, req.user.id]);
     if(result.rows.length === 0) {
         // res.status(404).json({
         //     success: false,

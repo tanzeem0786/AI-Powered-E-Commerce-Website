@@ -10,10 +10,12 @@ import productRoutes from './routes/productRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import orderRoutes from './routes/orderRoutes.js'
 import { stripeSetup } from './stripeSetup.js';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
 const app = express();
 
-config({ path: "./config/config.env" });
+config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), './config/config.env') });
 
 app.use(cors({
     origin: [process.env.FRONTEND_URL, 'http://localhost:5173', process.env.DASHBOARD_URL, 'http://localhost:5174'],
@@ -36,7 +38,7 @@ app.use("/api/v1/product", productRoutes);
 app.use("/api/v1/admin", adminRoutes);
 app.use("/api/v1/order", orderRoutes);
 
-createTables();
+await createTables();
 
 
 app.use(errorMiddleware);
