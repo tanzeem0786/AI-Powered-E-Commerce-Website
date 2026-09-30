@@ -13,6 +13,9 @@ const popupSlice = createSlice({
     toggleAuthPopup(state) {
       state.isAuthPopupOpen = !state.isAuthPopupOpen;
     },
+    closeAuthPopup(state) {
+      state.isAuthPopupOpen = false;
+    },
     toggleSidebar(state) {
       state.isSidebarOpen = !state.isSidebarOpen
     },
@@ -30,6 +33,7 @@ const popupSlice = createSlice({
 
 export const {
   toggleAuthPopup,
+  closeAuthPopup,
   toggleSidebar,
   toggleSearchBar,
   toggleCart,

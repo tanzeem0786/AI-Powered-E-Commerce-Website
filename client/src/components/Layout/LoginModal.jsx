@@ -1,180 +1,322 @@
-import React, { useState, useEffect, useRef } from "react";
-import { X, Mail, Lock, Eye, EyeOff } from "lucide-react";
-import { useDispatch } from "react-redux";
-import { login } from "../../store/slices/authSlice.js";
-import { toggleAuthPopup } from "../../store/slices/popupSlice.js";
+import { useEffect, useState } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { Eye, EyeOff, LockKeyhole, Mail, UserRound, X } from "lucide-react";
+import { forgotPassword, login, register } from "../../store/slices/authSlice.js";
+import { closeAuthPopup } from "../../store/slices/popupSlice.js";
 
+const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const passwordMessage = "Password must be between 8 and 16 characters.";
 
-const LoginModal = ({ isOpen = false }) => {
+const LoginModal = () => {
   const dispatch = useDispatch();
+  const { isAuthPopupOpen } = useSelector((state) => state.popup);
+  const { authUser, isCheckingAuth, isLoggingIn, isSigningUp, isRequestingForToken } =
+    useSelector((state) => state.auth);
+  const [mode, setMode] = useState("login");
+  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [remember, setRemember] = useState(false);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-  const modalRef = useRef(null);
+  const [resetSent, setResetSent] = useState(false);
 
-  
   useEffect(() => {
-    if (isOpen) {
-      setError("");
+    if (isAuthPopupOpen) {
+      setMode("login");
+      setName("");
+      setEmail("");
       setPassword("");
+      setConfirmPassword("");
+      setError("");
+      setResetSent(false);
+      setShowPassword(false);
     }
-  }, [isOpen]);
-  
-  if (!isOpen) return;
+  }, [isAuthPopupOpen]);
 
-  const validate = () => {
-    if (!email) {
-      setError("Please enter your email.");
-      return false;
-    }
-    if (!password) {
-      setError("Please enter your password.");
-      return false;
-    }
+  if (!isAuthPopupOpen || authUser) return null;
+
+  const changeMode = (nextMode) => {
+    setMode(nextMode);
     setError("");
+    setResetSent(false);
+    setPassword("");
+    setConfirmPassword("");
+  };
+
+  const validateEmail = () => {
+    if (!emailPattern.test(email.trim())) {
+      setError("Enter a valid email address.");
+      return false;
+    }
     return true;
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validate()) return;
-    setLoading(true);
+  const validatePassword = (value) => {
+    if (value.length < 8 || value.length > 16) {
+      setError(passwordMessage);
+      return false;
+    }
+    return true;
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError("");
+
+    if (mode === "forgot") {
+      if (!validateEmail()) return;
+      try {
+        await dispatch(forgotPassword(email.trim())).unwrap();
+        setResetSent(true);
+      } catch (message) {
+        setError(message);
+      }
+      return;
+    }
+
+    if (!validateEmail()) return;
+
+    if (mode === "register") {
+      if (name.trim().length < 3) {
+        setError("Name must be at least 3 characters.");
+        return;
+      }
+      if (!validatePassword(password)) return;
+      if (password !== confirmPassword) {
+        setError("Passwords do not match.");
+        return;
+      }
+      try {
+        await dispatch(register({ name: name.trim(), email: email.trim(), password })).unwrap();
+      } catch (message) {
+        setError(message);
+      }
+      return;
+    }
+
+    if (!validatePassword(password)) return;
     try {
-      await dispatch(login({ email, password, remember }));
-      isOpen = false;
-    } catch (err) {
-      setError(err?.message || "Login failed. Please try again.");
-    } finally {
-      setLoading(false);
+      await dispatch(login({ email: email.trim(), password })).unwrap();
+    } catch (message) {
+      setError(message);
     }
   };
 
-  if (!isOpen) return null;
+  const isLoading = isLoggingIn || isSigningUp || isRequestingForToken;
+  const title =
+    mode === "register" ? "Create your account" : mode === "forgot" ? "Forgot password?" : "Welcome back";
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center px-4"
-
-      aria-modal="true"
+      className="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto px-4 py-8"
       role="dialog"
-      aria-label="Login dialog"
+      aria-modal="true"
+      aria-labelledby="auth-modal-title"
     >
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" />
+      <button
+        type="button"
+        aria-label="Close sign in dialog"
+        className="fixed inset-0 bg-slate-950/70 backdrop-blur-sm"
+        onClick={() => dispatch(closeAuthPopup())}
+      />
 
-      <div
-        ref={modalRef}
-        className="relative z-50 w-full max-w-md transform overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-black/5 transition-all"
-      >
-        <div className="flex items-center justify-between border-b px-6 py-4">
-          <h3 className="text-lg font-semibold">Sign in to your account</h3>
+      <section className="relative z-10 my-auto w-full max-w-md overflow-hidden rounded-3xl border border-border bg-card text-card-foreground shadow-2xl">
+        <div className="flex items-start justify-between border-b border-border px-6 py-5 sm:px-8">
+          <div>
+            <p className="mb-1 text-xs font-semibold uppercase tracking-[0.22em] text-primary">E-Mart account</p>
+            <h2 id="auth-modal-title" className="text-2xl font-bold tracking-tight">
+              {title}
+            </h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {mode === "register"
+                ? "Join us for a smoother shopping experience."
+                : mode === "forgot"
+                  ? "We’ll email you a link to reset your password."
+                  : "Sign in to continue shopping."}
+            </p>
+          </div>
           <button
-            onClick={dispatch(toggleAuthPopup())}
+            type="button"
+            onClick={() => dispatch(closeAuthPopup())}
             aria-label="Close"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-gray-600 hover:bg-gray-100"
+            className="rounded-full p-2 text-muted-foreground transition hover:bg-secondary hover:text-foreground"
           >
-            <X size={18} />
+            <X size={20} />
           </button>
         </div>
 
-        <div className="px-6 py-6">
-          <div className="mb-4 text-sm text-gray-600">
-            Welcome back! Enter your details to continue.
-          </div>
+        <div className="px-6 py-6 sm:px-8">
+          {isCheckingAuth ? (
+            <div className="flex items-center justify-center gap-3 py-10 text-sm text-muted-foreground" role="status">
+              <span className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+              Restoring your session…
+            </div>
+          ) : resetSent ? (
+            <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-sm text-foreground" role="status">
+              <p className="font-semibold text-emerald-600">Reset email sent</p>
+              <p className="mt-1 text-muted-foreground">
+                Check your inbox for a password reset link. If it doesn’t arrive, check your spam folder.
+              </p>
+              <button
+                type="button"
+                onClick={() => changeMode("login")}
+                className="mt-4 font-semibold text-primary hover:underline"
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {mode === "register" && (
+                <label className="block">
+                  <span className="mb-1.5 block text-sm font-medium">Full name</span>
+                  <span className="flex items-center gap-3 rounded-xl border border-input bg-background px-3.5 py-3 focus-within:ring-2 focus-within:ring-ring">
+                    <UserRound size={18} className="shrink-0 text-muted-foreground" />
+                    <input
+                      autoComplete="name"
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                      minLength={3}
+                      maxLength={100}
+                      required
+                      placeholder="Your name"
+                      className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                    />
+                  </span>
+                </label>
+              )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <label className="block">
-              <span className="sr-only">Email</span>
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-300">
-                <Mail size={16} className="text-gray-400" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full border-0 bg-transparent text-sm outline-none"
-                  required
-                />
-              </div>
-            </label>
-
-            <label className="block">
-              <span className="sr-only">Password</span>
-              <div className="flex items-center gap-2 rounded-md border px-3 py-2 focus-within:ring-2 focus-within:ring-indigo-300">
-                <Lock size={16} className="text-gray-400" />
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full border-0 bg-transparent text-sm outline-none"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword((s) => !s)}
-                  className="ml-2 inline-flex items-center rounded-md p-1 text-gray-500 hover:bg-gray-100"
-                  aria-label={showPassword ? "Hide password" : "Show password"}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </div>
-            </label>
-
-            <div className="flex items-center justify-between text-sm">
-              <label className="inline-flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(e) => setRemember(e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                />
-                <span className="text-gray-600">Remember me</span>
+              <label className="block">
+                <span className="mb-1.5 block text-sm font-medium">Email address</span>
+                <span className="flex items-center gap-3 rounded-xl border border-input bg-background px-3.5 py-3 focus-within:ring-2 focus-within:ring-ring">
+                  <Mail size={18} className="shrink-0 text-muted-foreground" />
+                  <input
+                    type="email"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
+                    required
+                    placeholder="you@example.com"
+                    className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  />
+                </span>
               </label>
 
-              <button type="button" className="text-indigo-600 hover:underline text-sm">
-                Forgot password?
-              </button>
-            </div>
+              {mode !== "forgot" && (
+                <>
+                  <label className="block">
+                    <span className="mb-1.5 block text-sm font-medium">Password</span>
+                    <span className="flex items-center gap-3 rounded-xl border border-input bg-background px-3.5 py-3 focus-within:ring-2 focus-within:ring-ring">
+                      <LockKeyhole size={18} className="shrink-0 text-muted-foreground" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        autoComplete={mode === "register" ? "new-password" : "current-password"}
+                        value={password}
+                        onChange={(event) => setPassword(event.target.value)}
+                        minLength={8}
+                        maxLength={16}
+                        required
+                        placeholder="8–16 characters"
+                        className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword((visible) => !visible)}
+                        aria-label={showPassword ? "Hide password" : "Show password"}
+                        className="text-muted-foreground hover:text-foreground"
+                      >
+                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </span>
+                  </label>
 
-            {error && <div className="text-sm text-red-600">{error}</div>}
+                  {mode === "register" && (
+                    <label className="block">
+                      <span className="mb-1.5 block text-sm font-medium">Confirm password</span>
+                      <span className="flex items-center gap-3 rounded-xl border border-input bg-background px-3.5 py-3 focus-within:ring-2 focus-within:ring-ring">
+                        <LockKeyhole size={18} className="shrink-0 text-muted-foreground" />
+                        <input
+                          type="password"
+                          autoComplete="new-password"
+                          value={confirmPassword}
+                          onChange={(event) => setConfirmPassword(event.target.value)}
+                          minLength={8}
+                          maxLength={16}
+                          required
+                          placeholder="Re-enter your password"
+                          className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                        />
+                      </span>
+                    </label>
+                  )}
 
-            <div>
+                  {mode === "login" && (
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={() => changeMode("forgot")}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Forgot password?
+                      </button>
+                    </div>
+                  )}
+                </>
+              )}
+
+              {error && (
+                <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">
+                  {error}
+                </p>
+              )}
+
               <button
                 type="submit"
-                disabled={loading}
-                className="flex w-full items-center justify-center gap-2 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                disabled={isLoading || isCheckingAuth}
+                className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {loading ? "Signing in..." : "Sign in"}
+                {isLoading && <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+                {isLoading
+                  ? mode === "register"
+                    ? "Creating account…"
+                    : mode === "forgot"
+                      ? "Sending reset link…"
+                      : "Signing in…"
+                  : mode === "register"
+                    ? "Create account"
+                    : mode === "forgot"
+                      ? "Send reset link"
+                      : "Sign in"}
               </button>
-            </div>
+            </form>
+          )}
 
-            <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-gray-200" />
-              <div className="text-xs uppercase text-gray-400">or</div>
-              <div className="h-px flex-1 bg-gray-200" />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <button type="button" className="flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-gray-50">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 12.5v8.6h12.9C35.8 30.9 30.4 34 24 34c-7.7 0-14-6.3-14-14s6.3-14 14-14c3.7 0 7 .1 10.1 1.9z" /></svg>
-                <span className="text-sm">Google</span>
-              </button>
-
-              <button type="button" className="flex items-center justify-center gap-2 rounded-md border px-3 py-2 text-sm hover:bg-gray-50">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 24 24"><path fill="#1877F2" d="M22 12a10 10 0 10-11.5 9.9v-7h-2v-3h2v-2.2c0-2 1.2-3.1 3-3.1.9 0 1.8.1 1.8.1v2h-1c-1 0-1.3.6-1.3 1.2V12h2.3l-.4 3h-1.9v7A10 10 0 0022 12z" /></svg>
-                <span className="text-sm">Facebook</span>
-              </button>
-            </div>
-          </form>
+          {!resetSent && !isCheckingAuth && (
+            <p className="mt-6 text-center text-sm text-muted-foreground">
+              {mode === "register" ? (
+                <>
+                  Already have an account?{" "}
+                  <button type="button" onClick={() => changeMode("login")} className="font-semibold text-primary hover:underline">
+                    Sign in
+                  </button>
+                </>
+              ) : mode === "forgot" ? (
+                <button type="button" onClick={() => changeMode("login")} className="font-semibold text-primary hover:underline">
+                  Back to sign in
+                </button>
+              ) : (
+                <>
+                  New to E-Mart?{" "}
+                  <button type="button" onClick={() => changeMode("register")} className="font-semibold text-primary hover:underline">
+                    Create an account
+                  </button>
+                </>
+              )}
+            </p>
+          )}
         </div>
-
-        <div className="border-t px-6 py-4 text-center text-sm text-gray-600">
-          New here? <button onClick={() => { }} className="text-indigo-600 hover:underline">Create an account</button>
-        </div>
-      </div>
+      </section>
     </div>
   );
 };

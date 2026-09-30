@@ -1,4 +1,6 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useDispatch } from "react-redux";
 import { ThemeProvider } from "./contexts/ThemeContext";
 import { ToastContainer } from "react-toastify";
 
@@ -22,8 +24,16 @@ import About from "./pages/About";
 import FAQ from "./pages/FAQ";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
+import { getUser } from "./store/slices/authSlice.js";
 
 const App = () => {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(getUser());
+  }, [dispatch]);
+
   return (
     <>
       <ThemeProvider>
@@ -37,7 +47,7 @@ const App = () => {
             <LoginModal />
             <Routes>
               <Route path="/" element={<Index />} />
-              <Route path="/password/reset/:token" element={<Index />} />
+              <Route path="/password/reset/:token" element={<ResetPassword />} />
               <Route path="/products" element={<Products />} />
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />

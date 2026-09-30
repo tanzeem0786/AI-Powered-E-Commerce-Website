@@ -3,7 +3,7 @@ import { X, LogOut, Upload, Eye, EyeOff, User, Mail, Lock } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { logout, updateProfile, updatePassword } from "../../store/slices/authSlice.js";
-import { toggleAuthPopup } from "../../store/slices/popupSlice.js";
+import { closeAuthPopup } from "../../store/slices/popupSlice.js";
 import { Link } from "react-router-dom";
 
 const ProfilePanel = () => {
@@ -17,6 +17,7 @@ const ProfilePanel = () => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [profileImage, setProfileImage] = useState(null);
+  const [profileImagePreview, setProfileImagePreview] = useState("");
 
   const [formData, setFormData] = useState({
     name: "",
@@ -28,7 +29,7 @@ const ProfilePanel = () => {
   const [passwordData, setPasswordData] = useState({
     currentPassword: "",
     newPassword: "",
-    confirmPassword: "",
+    confirmNewPassword: "",
   });
 
   useEffect(() => {
@@ -42,14 +43,23 @@ const ProfilePanel = () => {
     }
   }, [authUser]);
 
-  if (!isAuthPopupOpen) return null;
+  if (!isAuthPopupOpen || !authUser) return null;
 
   const handleProfileImageChange = (e) => {
     const file = e.target.files?.[0];
+    if (file && !file.type.startsWith("image/")) {
+      toast.error("Please select an image file.");
+      return;
+    }
+    if (file && file.size > 5 * 1024 * 1024) {
+      toast.error("Image must be 5 MB or smaller.");
+      return;
+    }
     if (file) {
+      setProfileImage(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setProfileImage(reader.result);
+        setProfileImagePreview(reader.result);
       };
       reader.readAsDataURL(file);
     }
@@ -73,6 +83,14 @@ const ProfilePanel = () => {
 
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
+    if (formData.name.trim().length < 3) {
+      toast.error("Name must be at least 3 characters.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
+      toast.error("Enter a valid email address.");
+      return;
+    }
     const updateData = new FormData();
     updateData.append("name", formData.name);
     updateData.append("email", formData.email);
@@ -86,21 +104,22 @@ const ProfilePanel = () => {
       await dispatch(updateProfile(updateData)).unwrap();
       setIsEditingProfile(false);
       setProfileImage(null);
-    } catch (error) {
-      console.error("Profile update failed:", error);
+      setProfileImagePreview("");
+    } catch {
+      // The rejected thunk already displays the API error.
     }
   };
 
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
 
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
+    if (passwordData.newPassword !== passwordData.confirmNewPassword) {
       toast.error("New passwords do not match");
       return;
     }
 
-    if (passwordData.newPassword.length < 6) {
-      toast.error("Password must be at least 6 characters");
+    if (passwordData.newPassword.length < 8 || passwordData.newPassword.length > 16) {
+      toast.error("Password must be between 8 and 16 characters.");
       return;
     }
 
@@ -109,75 +128,49 @@ const ProfilePanel = () => {
         updatePassword({
           currentPassword: passwordData.currentPassword,
           newPassword: passwordData.newPassword,
-          confirmPassword: passwordData.confirmPassword,
+          confirmNewPassword: passwordData.confirmNewPassword,
         })
       ).unwrap();
 
       setPasswordData({
         currentPassword: "",
         newPassword: "",
-        confirmPassword: "",
+        confirmNewPassword: "",
       });
       setShowPasswordFields(false);
-      toast.success("Password updated successfully");
-    } catch (error) {
-      console.error("Password update failed:", error);
+    } catch {
+      // The rejected thunk already displays the API error.
     }
   };
 
   const handleLogout = async () => {
     try {
       await dispatch(logout()).unwrap();
-      dispatch(toggleAuthPopup());
       setIsEditingProfile(false);
       setShowPasswordFields(false);
       setPasswordData({
         currentPassword: "",
         newPassword: "",
-        confirmPassword: "",
+        confirmNewPassword: "",
       });
-      toast.success("Logged out successfully");
-    } catch (error) {
-      console.error("Logout failed:", error);
+    } catch {
+      // The rejected thunk already displays the API error.
     }
   };
-
-  if (!authUser) {
-    return (
-      <>
-        {/* OVERLAY */}
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => dispatch(toggleAuthPopup())} />
-
-        {/* EMPTY STATE */}
-        <div className="fixed right-0 top-0 h-full w-96 z-50 glass-panel animate-slide-in-right flex items-center justify-center">
-          <div className="text-center p-6">
-            <User className="w-12 h-12 text-primary mx-auto mb-4" />
-            <p className="text-foreground mb-6">Please log in to view your profile</p>
-            <button
-              onClick={() => dispatch(toggleAuthPopup())}
-              className="px-6 py-2 bg-primary text-primary-foreground rounded-lg hover:opacity-90 transition-opacity"
-            >
-              Close
-            </button>
-          </div>
-        </div>
-      </>
-    );
-  }
 
   return (
     <>
       {/* OVERLAY */}
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => dispatch(toggleAuthPopup())} />
+      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40" onClick={() => dispatch(closeAuthPopup())} />
 
       {/* PROFILE PANEL */}
-      <div className="fixed right-0 top-0 h-full w-96 z-50 glass-panel animate-slide-in-right overflow-y-auto">
+      <div className="fixed right-0 top-0 h-full w-full max-w-sm z-50 glass-panel animate-slide-in-right overflow-y-auto">
         {/* HEADER */}
         <div className="flex items-center justify-between p-6 border-b border-[hsla(var(--glass-border))]">
           <h2 className="text-xl font-semibold text-primary">My Profile</h2>
           <button
             onClick={() => {
-              dispatch(toggleAuthPopup());
+              dispatch(closeAuthPopup());
               setIsEditingProfile(false);
               setShowPasswordFields(false);
             }}
@@ -262,7 +255,7 @@ const ProfilePanel = () => {
               <div className="pt-4 border-t border-[hsla(var(--glass-border))] space-y-2">
                 <Link
                   to="/orders"
-                  onClick={() => dispatch(toggleAuthPopup())}
+                  onClick={() => dispatch(closeAuthPopup())}
                   className="block px-4 py-2 glass-card rounded-lg text-foreground hover:text-primary transition-colors text-center font-medium"
                 >
                   View Orders
@@ -278,10 +271,10 @@ const ProfilePanel = () => {
                 {/* PROFILE IMAGE */}
                 <div className="text-center">
                   <div className="w-20 h-20 rounded-full glass-card mx-auto mb-4 overflow-hidden flex items-center justify-center">
-                    {profileImage ? (
-                      <img src={profileImage} alt="Preview" className="w-full h-full object-cover" />
+                    {profileImagePreview ? (
+                      <img src={profileImagePreview} alt="Preview" className="w-full h-full object-cover" />
                     ) : authUser.avatar ? (
-                      <img src={authUser.avatar} alt={authUser.name} className="w-full h-full object-cover" />
+                      <img src={authUser.avatar.url} alt={authUser.name} className="w-full h-full object-cover" />
                     ) : (
                       <User className="w-10 h-10 text-primary" />
                     )}
@@ -306,6 +299,9 @@ const ProfilePanel = () => {
                     name="name"
                     value={formData.name}
                     onChange={handleProfileChange}
+                    minLength={3}
+                    maxLength={100}
+                    required
                     placeholder="Your name"
                     className="w-full px-4 py-2 glass-card rounded-lg text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -319,6 +315,7 @@ const ProfilePanel = () => {
                     name="email"
                     value={formData.email}
                     onChange={handleProfileChange}
+                    required
                     placeholder="Your email"
                     className="w-full px-4 py-2 glass-card rounded-lg text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary"
                   />
@@ -364,6 +361,7 @@ const ProfilePanel = () => {
                     onClick={() => {
                       setIsEditingProfile(false);
                       setProfileImage(null);
+                      setProfileImagePreview("");
                       setFormData({
                         name: authUser.name || "",
                         email: authUser.email || "",
@@ -395,6 +393,9 @@ const ProfilePanel = () => {
                       name="currentPassword"
                       value={passwordData.currentPassword}
                       onChange={handlePasswordChange}
+                      minLength={8}
+                      maxLength={16}
+                      required
                       placeholder="Enter current password"
                       className="w-full px-4 py-2 pr-10 glass-card rounded-lg text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary"
                     />
@@ -417,6 +418,9 @@ const ProfilePanel = () => {
                       name="newPassword"
                       value={passwordData.newPassword}
                       onChange={handlePasswordChange}
+                      minLength={8}
+                      maxLength={16}
+                      required
                       placeholder="Enter new password"
                       className="w-full px-4 py-2 pr-10 glass-card rounded-lg text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary"
                     />
@@ -436,9 +440,12 @@ const ProfilePanel = () => {
                   <div className="relative">
                     <input
                       type={showConfirmPassword ? "text" : "password"}
-                      name="confirmPassword"
-                      value={passwordData.confirmPassword}
+                      name="confirmNewPassword"
+                      value={passwordData.confirmNewPassword}
                       onChange={handlePasswordChange}
+                      minLength={8}
+                      maxLength={16}
+                      required
                       placeholder="Confirm new password"
                       className="w-full px-4 py-2 pr-10 glass-card rounded-lg text-foreground placeholder-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary"
                     />
@@ -454,7 +461,7 @@ const ProfilePanel = () => {
 
                 {/* PASSWORD REQUIREMENTS */}
                 <div className="text-xs text-foreground/60 space-y-1 bg-secondary/50 p-3 rounded-lg">
-                  <p>• Password must be at least 6 characters</p>
+                  <p>• Password must be between 8 and 16 characters</p>
                   <p>• Both passwords must match</p>
                 </div>
 
@@ -474,7 +481,7 @@ const ProfilePanel = () => {
                       setPasswordData({
                         currentPassword: "",
                         newPassword: "",
-                        confirmPassword: "",
+                        confirmNewPassword: "",
                       });
                     }}
                     className="flex-1 px-4 py-2 bg-secondary text-foreground rounded-lg hover:opacity-90 transition-opacity font-medium"
