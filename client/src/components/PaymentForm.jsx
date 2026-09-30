@@ -1,14 +1,11 @@
 import { useRef, useState } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useDispatch, useSelector } from "react-redux";
+import { useSelector } from "react-redux";
 import { CreditCard, LockKeyhole } from "lucide-react";
-import { toast } from "react-toastify";
-import { clearCart } from "../store/slices/cartSlice.js";
 
-const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
+const PaymentForm = ({ onPaymentComplete, onPaymentStatus, onCancel }) => {
   const stripe = useStripe();
   const elements = useElements();
-  const dispatch = useDispatch();
   const paymentIntent = useSelector((state) => state.order.paymentIntent);
   const [isPaying, setIsPaying] = useState(false);
   const [paymentError, setPaymentError] = useState("");
@@ -32,7 +29,6 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
     paymentLock.current = true;
     setIsPaying(true);
     onPaymentStatus("processing");
-    let paymentSucceeded = false;
     try {
       const result = await stripe.confirmCardPayment(
         paymentIntent,
@@ -43,16 +39,18 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
         onPaymentStatus("failed");
         return;
       }
+      if (result.paymentIntent?.status === "canceled") {
+        setPaymentError("This payment was cancelled. You can resume checkout and try again.");
+        onPaymentStatus("cancelled");
+        return;
+      }
       if (result.paymentIntent?.status !== "succeeded") {
-        setPaymentError("Payment is not complete yet. Please follow the payment confirmation steps.");
-        onPaymentStatus("failed");
+        setPaymentError("Payment is still pending. Check its status before trying again.");
+        onPaymentStatus("pending");
         return;
       }
 
-      paymentSucceeded = true;
-      onPaymentStatus("succeeded");
-      toast.success("Payment successful.");
-      dispatch(clearCart());
+      onPaymentStatus("processing");
       onPaymentComplete();
     } catch (error) {
       setPaymentError(error.message || "Payment failed. Please try again.");
@@ -60,7 +58,6 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
     } finally {
       paymentLock.current = false;
       setIsPaying(false);
-      if (!paymentSucceeded) onPaymentStatus("failed");
     }
   };
 
@@ -87,9 +84,12 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
       </div>
 
       {paymentError && (
-        <p className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive" role="alert">
           {paymentError}
-        </p>
+          {/stock|insufficient|inventory/i.test(paymentError) && (
+            <p className="mt-1">Stock may have changed. Return to your cart, refresh availability, and review the items.</p>
+          )}
+        </div>
       )}
 
       <button
@@ -102,7 +102,16 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
         ) : (
           <CreditCard size={17} />
         )}
-        {isPaying ? "Confirming payment…" : "Pay securely"}
+        {isPaying ? "Confirming payment…" : paymentError ? "Retry payment" : "Pay securely"}
+      </button>
+
+      <button
+        type="button"
+        onClick={onCancel}
+        disabled={isPaying}
+        className="w-full rounded-xl border border-border px-5 py-2.5 text-sm font-semibold text-muted-foreground transition hover:border-primary hover:text-primary disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        Cancel payment
       </button>
 
       <p className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground">

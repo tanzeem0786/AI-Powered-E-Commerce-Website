@@ -1,13 +1,15 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, ArrowRight, Check, CreditCard, LockKeyhole, MapPin, ShieldCheck, Truck } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+import { toast } from "react-toastify";
 import PaymentForm from "../components/PaymentForm.jsx";
-import { finishCheckout, placeOrder, clearCheckoutError } from "../store/slices/orderSlice.js";
+import { fetchOrderPaymentStatus, finishCheckout, placeOrder, clearCheckoutError } from "../store/slices/orderSlice.js";
 import { formatProductPrice } from "../components/Products/productUtils.js";
 import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { clearCart } from "../store/slices/cartSlice.js";
 
 const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
   ? loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY)
@@ -75,13 +77,24 @@ const Payment = () => {
   const dispatch = useDispatch();
   const { cart } = useSelector((state) => state.cart);
   const { authUser, isCheckingAuth } = useSelector((state) => state.auth);
-  const { placingOrder, paymentIntent, finalPrice, checkoutError } = useSelector((state) => state.order);
+  const {
+    placingOrder,
+    paymentIntent,
+    orderId,
+    finalPrice,
+    checkoutError,
+    paymentStatus: serverPaymentStatus,
+    paymentFailureReason,
+  } =
+    useSelector((state) => state.order);
   const [shipping, setShipping] = useState(emptyShipping);
   const [formError, setFormError] = useState("");
   const [fieldErrors, setFieldErrors] = useState({});
   const [checkoutStep, setCheckoutStep] = useState(2);
   const [paymentStatus, setPaymentStatus] = useState("idle");
   const [paymentComplete, setPaymentComplete] = useState(false);
+  const [paymentStatusMessage, setPaymentStatusMessage] = useState("");
+  const [pollAttempt, setPollAttempt] = useState(0);
   const submitLock = useRef(false);
 
   const cartIsValid = useMemo(() => hasValidCartItems(cart), [cart]);
@@ -91,6 +104,52 @@ const Payment = () => {
     const shippingEstimate = subtotal >= 50000 ? 0 : 10000;
     return { subtotal, tax, shipping: shippingEstimate, total: subtotal + tax + shippingEstimate };
   }, [cart]);
+
+  useEffect(() => {
+    if (paymentStatus !== "processing" || !orderId) return undefined;
+
+    let isActive = true;
+    let timeoutId;
+    let attempts = 0;
+    const checkStatus = async () => {
+      attempts += 1;
+      const result = await dispatch(fetchOrderPaymentStatus(orderId));
+      if (!isActive) return;
+
+      if (fetchOrderPaymentStatus.fulfilled.match(result)) {
+        const status = String(result.payload || "").toLowerCase();
+        if (status === "paid") {
+          dispatch(clearCart());
+          dispatch(finishCheckout());
+          setPaymentStatus("succeeded");
+          setPaymentStatusMessage("");
+          setPaymentComplete(true);
+          toast.success("Payment confirmed by the store.");
+          return;
+        }
+        if (status === "failed") {
+          setPaymentStatus("failed");
+          setPaymentStatusMessage(result.payload.failureReason || "The order service could not confirm this payment.");
+          return;
+        }
+      } else {
+        setPaymentStatusMessage("Payment was submitted, but confirmation is temporarily unavailable.");
+      }
+
+      if (attempts >= 30) {
+        setPaymentStatus("pending");
+        setPaymentStatusMessage("Your payment is still pending confirmation. You can check again or resume the payment.");
+        return;
+      }
+      timeoutId = window.setTimeout(checkStatus, 2000);
+    };
+
+    checkStatus();
+    return () => {
+      isActive = false;
+      window.clearTimeout(timeoutId);
+    };
+  }, [dispatch, orderId, paymentStatus, pollAttempt]);
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -153,8 +212,9 @@ const Payment = () => {
   };
 
   const handlePaymentComplete = () => {
-    dispatch(finishCheckout());
-    setPaymentComplete(true);
+    setCheckoutStep(5);
+    setPaymentStatus("processing");
+    setPaymentStatusMessage("Stripe confirmed the payment attempt. Waiting for the store’s order service to confirm it.");
   };
 
   if (isCheckingAuth) {
@@ -173,7 +233,7 @@ const Payment = () => {
 
   const activeStep = paymentComplete
     ? 6
-    : paymentStatus === "processing" || paymentStatus === "failed"
+    : paymentStatus === "processing" || paymentStatus === "failed" || paymentStatus === "cancelled" || paymentStatus === "pending"
       ? 5
       : paymentIntent
         ? 4
@@ -244,26 +304,106 @@ const Payment = () => {
         ) : paymentIntent ? (
           <section className="mx-auto max-w-xl rounded-3xl border border-border bg-card p-6 text-card-foreground shadow-sm sm:p-8">
             <p className="mb-2 text-xs font-semibold uppercase tracking-[0.22em] text-primary">Secure payment</p>
-            <h1 className="text-2xl font-bold">{paymentStatus === "processing" ? "Confirming payment" : "Complete your payment"}</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Order total confirmed by the server.</p>
+            <h1 className="text-2xl font-bold">
+              {paymentStatus === "processing"
+                ? "Confirming payment"
+                : paymentStatus === "pending"
+                  ? "Payment pending"
+                  : paymentStatus === "failed"
+                    ? "Payment failed"
+                    : paymentStatus === "cancelled"
+                      ? "Payment cancelled"
+                      : "Complete your payment"}
+            </h1>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Order #{orderId} · {serverPaymentStatus === "Paid" ? "Paid" : "Payment Pending"}
+            </p>
             <p className="mt-5 text-3xl font-bold">{formatProductPrice(Number(finalPrice) * 100)}</p>
             {paymentStatus === "processing" && (
               <p className="mt-4 rounded-xl bg-primary/5 p-4 text-sm text-muted-foreground" role="status">
-                Your payment is being securely confirmed. Please keep this page open.
+                {paymentStatusMessage || "Stripe confirmed the payment attempt. Waiting for server/webhook confirmation."}
+                {" "}Payment is not marked paid until the server confirms it.
               </p>
             )}
-            {stripePromise ? (
+            {paymentStatus === "pending" && (
+              <div className="mt-4 space-y-3 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm" role="status">
+                <p className="font-semibold text-foreground">Payment is still pending</p>
+                <p className="text-muted-foreground">{paymentStatusMessage || "The payment provider has not confirmed this order yet."}</p>
+                <p className="text-muted-foreground">Your cart is unchanged. Stock is not reserved before payment confirmation.</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentStatusMessage("");
+                      setPaymentStatus("processing");
+                      setPollAttempt((attempt) => attempt + 1);
+                    }}
+                    className="rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                  >
+                    Check payment status
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPaymentStatusMessage("");
+                      setPaymentStatus("idle");
+                    }}
+                    className="rounded-lg border border-border px-3 py-2 text-xs font-semibold hover:border-primary hover:text-primary"
+                  >
+                    Resume payment
+                  </button>
+                </div>
+              </div>
+            )}
+            {paymentStatus === "failed" && (
+              <div className="mt-4 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">
+                <p className="font-semibold">Payment could not be completed</p>
+                <p className="mt-1">{paymentFailureReason || paymentStatusMessage || "Check your card details and retry. If stock changed, return to your cart and refresh availability."}</p>
+                {(paymentFailureReason || paymentStatusMessage) && /stock|insufficient|inventory|refund/i.test(paymentFailureReason || paymentStatusMessage) && (
+                  <Link to="/cart" className="mt-2 inline-flex font-semibold underline">Review cart stock</Link>
+                )}
+              </div>
+            )}
+            {paymentStatus === "cancelled" && (
+              <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 text-sm" role="status">
+                <p className="font-semibold">Payment attempt cancelled</p>
+                <p className="mt-1 text-muted-foreground">
+                  This pauses payment on this page; the server-side order remains unpaid and pending. Your cart has not been cleared.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentStatusMessage("");
+                    setPaymentStatus("idle");
+                  }}
+                  className="mt-3 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                >
+                  Resume payment
+                </button>
+              </div>
+            )}
+            {serverPaymentStatus === "Failed" ? (
+              <div className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">
+                <p className="font-semibold">Order could not be fulfilled</p>
+                <p className="mt-1">{paymentFailureReason || "The payment was not completed. Please review your cart before placing another order."}</p>
+                <Link to="/cart" className="mt-3 inline-flex font-semibold underline">Return to cart</Link>
+              </div>
+            ) : stripePromise && paymentStatus !== "pending" && paymentStatus !== "cancelled" ? (
               <Elements stripe={stripePromise}>
                 <PaymentForm
                   onPaymentStatus={setPaymentStatus}
                   onPaymentComplete={handlePaymentComplete}
+                  onCancel={() => {
+                    setPaymentStatus("cancelled");
+                    setPaymentStatusMessage("");
+                  }}
                 />
               </Elements>
-            ) : (
+            ) : !stripePromise ? (
               <p className="mt-5 rounded-xl border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive" role="alert">
                 Online payment is not configured. Your cart is saved; please contact support or try again later.
               </p>
-            )}
+            ) : null}
           </section>
         ) : checkoutStep === 2 ? (
           <div className="grid items-start gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">

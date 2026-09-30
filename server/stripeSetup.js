@@ -21,7 +21,7 @@ export const stripeSetup = (app) => {
                 try {
                     await database.query("BEGIN");
                     const paymentTableUpdateResult = await database.query(
-                        "UPDATE payments SET payment_status = 'Paid' WHERE payment_intent_id = $1 AND payment_status <> 'Paid' RETURNING *",
+                        "UPDATE payments SET payment_status = 'Paid' WHERE payment_intent_id = $1 AND payment_status = 'Pending' RETURNING *",
                         [paymentIntentId]
                     );
                     if (paymentTableUpdateResult.rows.length === 0) {
@@ -47,12 +47,31 @@ export const stripeSetup = (app) => {
                             [item.quantity, item.product_id]
                         );
                         if (stockUpdate.rowCount !== 1) {
-                            throw new Error("Insufficient stock while completing payment.");
+                            const error = new Error("Insufficient stock while completing payment.");
+                            error.code = "INSUFFICIENT_STOCK";
+                            throw error;
                         }
                     }
                     await database.query("COMMIT");
                 } catch (error) {
                     await database.query("ROLLBACK");
+                    if (error.code === "INSUFFICIENT_STOCK") {
+                        try {
+                            const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+                            await stripe.refunds.create(
+                                { payment_intent: paymentIntentId },
+                                { idempotencyKey: `stock-refund-${paymentIntentId}` }
+                            );
+                            await database.query(
+                                "UPDATE payments SET payment_status = 'Failed', failure_reason = $1 WHERE payment_intent_id = $2 AND payment_status = 'Pending'",
+                                ["Insufficient stock. The payment was refunded.", paymentIntentId]
+                            );
+                            return res.status(200).send({ received: true });
+                        } catch (refundError) {
+                            console.error("Failed to refund payment after stock validation:", refundError);
+                            return res.status(500).send("Payment succeeded but stock changed; automatic refund needs retry.");
+                        }
+                    }
                     return res.status(500).send(`Error Updating paid_at Timestamp in orders table`);
                 }
             }

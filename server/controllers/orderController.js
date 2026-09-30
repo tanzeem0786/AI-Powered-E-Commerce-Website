@@ -119,6 +119,7 @@ export const placeNewOrder = catchAsyncErrors(async (req, res, next) => {
         return res.status(200).json({
         success: true,
         message: "Order Placed Successfully. Please Proceed to Payment.",
+        orderId,
         paymentIntent: paymentResponse.clientSecret,
         total_price: total_price / 100,
         });
@@ -151,11 +152,15 @@ export const fetchSingleOrder = catchAsyncErrors(async (req, res, next) => {
                         'address', s.address,
                         'pincode', s.pincode,
                         'phone', s.phone
-                    ) AS shipping_info FROM orders o
+                    ) AS shipping_info,
+                    p.payment_status AS payment_status,
+                    p.failure_reason AS payment_failure_reason
+                    FROM orders o
                     LEFT JOIN order_items oi ON o.id = oi.order_id
                     LEFT JOIN shipping_info s ON o.id = s.order_id
+                    LEFT JOIN payments p ON p.order_id = o.id
                     WHERE o.id = $1 AND o.buyer_id = $2
-                    GROUP BY o.id, s.id;
+                    GROUP BY o.id, s.id, p.id;
 `,
         [orderId, req.user.id]);
     if(result.rows.length === 0) {

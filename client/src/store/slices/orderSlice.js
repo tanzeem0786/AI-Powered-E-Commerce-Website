@@ -34,6 +34,22 @@ export const placeOrder = createAsyncThunk(
   }
 );
 
+export const fetchOrderPaymentStatus = createAsyncThunk(
+  "order/fetchPaymentStatus",
+  async (orderId, thunkAPI) => {
+    try {
+      const response = await axiosInstance.get(`/order/${orderId}`);
+      return {
+        status: response.data.orders.payment_status,
+        failureReason: response.data.orders.payment_failure_reason,
+      };
+    } catch (error) {
+      const message = getErrorMessage(error);
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
 const orderSlice = createSlice({
   name: "order",
   initialState: {
@@ -44,6 +60,9 @@ const orderSlice = createSlice({
     finalPrice: null,
     orderStep: 1,
     paymentIntent: "",
+    orderId: null,
+    paymentStatus: null,
+    paymentFailureReason: null,
   },
   reducers: {
     clearCheckoutError(state) {
@@ -53,6 +72,9 @@ const orderSlice = createSlice({
       state.checkoutError = null;
       state.finalPrice = null;
       state.paymentIntent = "";
+      state.orderId = null;
+      state.paymentStatus = null;
+      state.paymentFailureReason = null;
       state.placingOrder = false;
       state.orderStep = 1;
     },
@@ -61,6 +83,8 @@ const orderSlice = createSlice({
       state.paymentIntent = "";
       state.placingOrder = false;
       state.orderStep = 6;
+      state.paymentStatus = "Paid";
+      state.paymentFailureReason = null;
     },
   },
   extraReducers: (builder) => {
@@ -72,11 +96,18 @@ const orderSlice = createSlice({
       .addCase(placeOrder.fulfilled, (state, action) => {
         state.placingOrder = false;
         state.paymentIntent = action.payload.paymentIntent;
+        state.orderId = action.payload.orderId;
+        state.paymentStatus = "Pending";
+        state.paymentFailureReason = null;
         state.finalPrice = action.payload.total_price;
       })
       .addCase(placeOrder.rejected, (state, action) => {
         state.placingOrder = false;
         state.checkoutError = action.payload || "Unable to place your order.";
+      })
+      .addCase(fetchOrderPaymentStatus.fulfilled, (state, action) => {
+        state.paymentStatus = action.payload.status;
+        state.paymentFailureReason = action.payload.failureReason || null;
       });
   },
 });
