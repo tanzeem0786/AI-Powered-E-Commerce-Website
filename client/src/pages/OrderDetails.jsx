@@ -3,7 +3,7 @@ import { ArrowLeft, MapPin, Package, RotateCcw, Truck } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { fetchOrderDetails } from "../store/slices/orderSlice.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 import { formatProductPrice } from "../components/Products/productUtils.js";
 import OrderStatusBadge from "../components/Orders/OrderStatusBadge.jsx";
 
@@ -42,7 +42,7 @@ const OrderDetails = () => {
         <section className="w-full max-w-md rounded-3xl border border-border bg-card p-8 text-center text-card-foreground">
           <h1 className="text-2xl font-bold">Sign in to view this order</h1>
           <p className="mt-2 text-sm text-muted-foreground">Order details are only available to the account that placed the order.</p>
-          <button type="button" onClick={() => dispatch(toggleAuthPopup())} className="mt-5 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground">
+          <button type="button" onClick={() => dispatch(openAuthPopup())} className="mt-5 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground">
             Sign in
           </button>
         </section>

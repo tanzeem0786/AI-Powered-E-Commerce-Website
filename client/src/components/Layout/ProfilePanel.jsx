@@ -8,7 +8,7 @@ import { Link } from "react-router-dom";
 
 const ProfilePanel = () => {
   const dispatch = useDispatch();
-  const { authUser, isUpdatingProfile, isUpdatingPassword } = useSelector((state) => state.auth);
+  const { authUser, isUpdatingProfile, isUpdatingPassword, isLoggingOut } = useSelector((state) => state.auth);
   const { isAuthPopupOpen } = useSelector((state) => state.popup);
 
   const [showPasswordFields, setShowPasswordFields] = useState(false);
@@ -244,10 +244,11 @@ const ProfilePanel = () => {
                 </button>
                 <button
                   onClick={handleLogout}
-                  className="w-full px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition-colors font-medium flex items-center justify-center space-x-2"
+                  disabled={isLoggingOut}
+                  className="w-full px-4 py-2 bg-red-500/20 text-red-500 rounded-lg hover:bg-red-500/30 transition-colors font-medium flex items-center justify-center space-x-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Logout</span>
+                  <span>{isLoggingOut ? "Logging out…" : "Logout"}</span>
                 </button>
               </div>
 

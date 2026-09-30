@@ -3,7 +3,7 @@ import { AlertCircle, RotateCcw, Search, Sparkles, X } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import ProductCard from "./ProductCard.jsx";
 import { searchProductsWithAI } from "../../store/slices/productSlice.js";
-import { closeAIModal, toggleAuthPopup } from "../../store/slices/popupSlice.js";
+import { closeAIModal, openAuthPopup } from "../../store/slices/popupSlice.js";
 
 const examplePrompts = [
   "Show me black headphones under ₹5000",
@@ -158,7 +158,7 @@ const AISearchModal = () => {
                   type="button"
                   onClick={() => {
                     dispatch(closeAIModal());
-                    dispatch(toggleAuthPopup());
+                    dispatch(openAuthPopup());
                   }}
                   className="mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
                 >

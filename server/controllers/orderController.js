@@ -268,7 +268,8 @@ if(result.rows.length === 0 ) {
 // 7 hours 52 mins
 export const updateOrderStatus = catchAsyncErrors(async(req, res, next) => {
     const {status} = req.body;
-    if(!status) {
+    const allowedStatuses = ["Processing", "Shipped", "Delivered", "Cancelled"];
+    if(!allowedStatuses.includes(status)) {
         return next(new ErrorHandler("Provide a Valid Status For Order!", 400));
     }
     const {orderId} = req.params;

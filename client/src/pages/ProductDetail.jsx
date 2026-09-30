@@ -9,7 +9,7 @@ import {
   fetchSingleProduct,
   submitProductReview,
 } from "../store/slices/productSlice.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 import { formatProductPrice, getProductImages, getReviewCount, getStockStatus } from "../components/Products/productUtils.js";
 
 const ProductDetail = () => {
@@ -81,7 +81,7 @@ const ProductDetail = () => {
             {isAuthenticationError ? (
               <button
                 type="button"
-                onClick={() => dispatch(toggleAuthPopup())}
+                onClick={() => dispatch(openAuthPopup())}
                 className="rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
               >
                 Sign in
@@ -341,7 +341,7 @@ const ProductDetail = () => {
                 <p className="text-sm text-muted-foreground">Sign in with your account to check review eligibility.</p>
                 <button
                   type="button"
-                  onClick={() => dispatch(toggleAuthPopup())}
+                  onClick={() => dispatch(openAuthPopup())}
                   className="rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
                 >
                   Sign in

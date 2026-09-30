@@ -1,9 +1,11 @@
 import { useRef, useState } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
-import { useSelector } from "react-redux";
+import { useDispatch, useSelector } from "react-redux";
 import { CreditCard, LockKeyhole } from "lucide-react";
+import { setPaymentProcessing } from "../store/slices/orderSlice.js";
 
 const PaymentForm = ({ onPaymentComplete, onPaymentStatus, onCancel }) => {
+  const dispatch = useDispatch();
   const stripe = useStripe();
   const elements = useElements();
   const paymentIntent = useSelector((state) => state.order.paymentIntent);
@@ -28,6 +30,7 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus, onCancel }) => {
 
     paymentLock.current = true;
     setIsPaying(true);
+    dispatch(setPaymentProcessing(true));
     onPaymentStatus("processing");
     try {
       const result = await stripe.confirmCardPayment(
@@ -58,6 +61,7 @@ const PaymentForm = ({ onPaymentComplete, onPaymentStatus, onCancel }) => {
     } finally {
       paymentLock.current = false;
       setIsPaying(false);
+      dispatch(setPaymentProcessing(false));
     }
   };
 

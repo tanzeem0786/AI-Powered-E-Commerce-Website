@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
 import { ArrowRight, ClipboardList, Package, RotateCcw } from "lucide-react";
 import { fetchMyOrders } from "../store/slices/orderSlice.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 import OrderStatusBadge from "../components/Orders/OrderStatusBadge.jsx";
 import { formatProductPrice } from "../components/Products/productUtils.js";
 
@@ -37,7 +37,7 @@ const Orders = () => {
           <p className="mt-2 text-sm text-muted-foreground">Your order history is private to your account.</p>
           <button
             type="button"
-            onClick={() => dispatch(toggleAuthPopup())}
+            onClick={() => dispatch(openAuthPopup())}
             className="mt-5 rounded-xl bg-primary px-5 py-3 font-semibold text-primary-foreground hover:opacity-90"
           >
             Sign in

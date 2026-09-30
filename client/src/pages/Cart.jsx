@@ -5,7 +5,7 @@ import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
 import { refreshCart, removeFromCart, setCartQuantity } from "../store/slices/cartSlice.js";
 import { formatProductPrice, getProductImage } from "../components/Products/productUtils.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 import { clearCheckoutError } from "../store/slices/orderSlice.js";
 
 const TAX_RATE = 0.025;
@@ -46,7 +46,7 @@ const Cart = () => {
     }
     if (!authUser) {
       toast.info("Sign in before proceeding to checkout.");
-      dispatch(toggleAuthPopup());
+      dispatch(openAuthPopup());
       return;
     }
     navigate("/payment");

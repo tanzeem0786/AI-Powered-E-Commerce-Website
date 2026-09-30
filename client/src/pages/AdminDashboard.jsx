@@ -9,7 +9,9 @@ import { Link } from "react-router-dom";
 import { toast } from "react-toastify";
 import { axiosInstance } from "../lib/axios.js";
 import { formatProductPrice, getProductImage } from "../components/Products/productUtils.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
+import { createProduct, deleteProduct, fetchProducts, updateProduct } from "../store/slices/productSlice.js";
+import { deleteAdminOrder, fetchAdminOrders, updateAdminOrderStatus } from "../store/slices/orderSlice.js";
 
 const sections = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -218,6 +220,8 @@ const ProductForm = ({ product, saving, onCancel, onSave }) => {
 const AdminDashboard = () => {
   const dispatch = useDispatch();
   const { authUser, isCheckingAuth } = useSelector((state) => state.auth);
+  const productState = useSelector((state) => state.product);
+  const orderState = useSelector((state) => state.order);
   const [section, setSection] = useState("overview");
   const [stats, setStats] = useState(null);
   const [users, setUsers] = useState([]);
@@ -226,11 +230,12 @@ const AdminDashboard = () => {
   const [products, setProducts] = useState([]);
   const [productsTotal, setProductsTotal] = useState(0);
   const [productsPage, setProductsPage] = useState(1);
-  const [orders, setOrders] = useState([]);
+  const orders = orderState.adminOrders;
   const [selectedOrder, setSelectedOrder] = useState(null);
   const [productToEdit, setProductToEdit] = useState(null);
   const [showProductForm, setShowProductForm] = useState(false);
   const [confirmDialog, setConfirmDialog] = useState(null);
+  const [serverForbidden, setServerForbidden] = useState(false);
   const [busyAction, setBusyAction] = useState("");
   const [loading, setLoading] = useState({});
   const [errors, setErrors] = useState({});
@@ -245,7 +250,9 @@ const AdminDashboard = () => {
       const response = await axiosInstance.get("/admin/fetch/dashboard-stats");
       setStats(response.data);
     } catch (error) {
-      setSectionError("overview", errorMessage(error, "Unable to load dashboard statistics."));
+      const message = errorMessage(error, "Unable to load dashboard statistics.");
+      setSectionError("overview", message);
+      toast.error(message);
     } finally {
       setSectionLoading("overview", false);
     }
@@ -259,7 +266,9 @@ const AdminDashboard = () => {
       setUsers(response.data.users || []);
       setUsersTotal(Number(response.data.totalUsers) || 0);
     } catch (error) {
-      setSectionError("users", errorMessage(error, "Unable to load users."));
+      const message = errorMessage(error, "Unable to load users.");
+      setSectionError("users", message);
+      toast.error(message);
     } finally {
       setSectionLoading("users", false);
     }
@@ -269,36 +278,37 @@ const AdminDashboard = () => {
     setSectionLoading("products", true);
     setSectionError("products", "");
     try {
-      const response = await axiosInstance.get("/product", { params: { page } });
-      setProducts(response.data.products || []);
-      setProductsTotal(Number(response.data.totalProducts) || 0);
+      const response = await dispatch(fetchProducts({ page })).unwrap();
+      setProducts(response.products || []);
+      setProductsTotal(Number(response.totalProducts) || 0);
     } catch (error) {
       setSectionError("products", errorMessage(error, "Unable to load products."));
     } finally {
       setSectionLoading("products", false);
     }
-  }, [productsPage]);
+  }, [dispatch, productsPage]);
 
   const loadOrders = useCallback(async () => {
     setSectionLoading("orders", true);
     setSectionError("orders", "");
     try {
-      const response = await axiosInstance.get("/order/admin/get-all-orders");
-      setOrders(response.data.allOrders || []);
+      await dispatch(fetchAdminOrders()).unwrap();
     } catch (error) {
-      if (error.response?.status === 404 && /no orders/i.test(error.response?.data?.message || "")) {
-        setOrders([]);
-      } else {
-        setSectionError("orders", errorMessage(error, "Unable to load orders."));
-      }
+      setSectionError("orders", typeof error === "string" ? error : "Unable to load orders.");
     } finally {
       setSectionLoading("orders", false);
     }
-  }, []);
+  }, [dispatch]);
 
   useEffect(() => {
     if (authUser?.role === "Admin") loadStats();
   }, [authUser?.role, loadStats]);
+
+  useEffect(() => {
+    const handleForbidden = () => setServerForbidden(true);
+    window.addEventListener("app:forbidden", handleForbidden);
+    return () => window.removeEventListener("app:forbidden", handleForbidden);
+  }, []);
 
   useEffect(() => {
     if (authUser?.role !== "Admin") return;
@@ -322,13 +332,12 @@ const AdminDashboard = () => {
     const { kind, id } = confirmDialog;
     setBusyAction(`delete-${kind}-${id}`);
     try {
-      const endpoints = {
-        user: `/admin/delete/${id}`,
-        product: `/product/admin/delete/${id}`,
-        order: `/order/admin/delete/${id}`,
-      };
-      const response = await axiosInstance.delete(endpoints[kind]);
-      toast.success(response.data.message || `${kind} deleted.`);
+      if (kind === "product") await dispatch(deleteProduct(id)).unwrap();
+      else if (kind === "order") await dispatch(deleteAdminOrder(id)).unwrap();
+      else {
+        const response = await axiosInstance.delete(`/admin/delete/${id}`);
+        toast.success(response.data.message || "User deleted.");
+      }
       setConfirmDialog(null);
       if (kind === "user") {
         loadStats();
@@ -342,12 +351,9 @@ const AdminDashboard = () => {
         if (nextPage !== productsPage) setProductsPage(nextPage);
         else loadProducts(productsPage);
       }
-      if (kind === "order") {
-        loadOrders();
-        loadStats();
-      }
+      if (kind === "order") loadStats();
     } catch (error) {
-      toast.error(errorMessage(error, `Unable to delete ${kind}.`));
+      if (typeof error !== "string") toast.error(errorMessage(error, `Unable to delete ${kind}.`));
     } finally {
       setBusyAction("");
     }
@@ -360,52 +366,36 @@ const AdminDashboard = () => {
       toast.error("Enter a valid positive price and whole-number stock quantity.");
       return;
     }
-    setBusyAction("save-product");
     try {
-      let response;
+      const normalizedForm = {
+        name: form.name.trim(),
+        description: form.description.trim(),
+        price,
+        category: form.category.trim(),
+        stock,
+      };
       if (productToEdit) {
-        response = await axiosInstance.put(`/product/admin/update/${productToEdit.id}`, {
-          ...form,
-          price,
-          stock,
-        });
+        await dispatch(updateProduct({ productId: productToEdit.id, form: normalizedForm })).unwrap();
       } else {
-        const body = new FormData();
-        body.append("name", form.name.trim());
-        body.append("description", form.description.trim());
-        body.append("price", String(price));
-        body.append("category", form.category.trim());
-        body.append("stock", String(stock));
-        images.forEach((image) => body.append("images", image));
-        response = await axiosInstance.post("/product/admin/create", body);
+        await dispatch(createProduct({ form: normalizedForm, images })).unwrap();
         setProductsPage(1);
       }
-      toast.success(response.data.message || "Product saved.");
       loadStats();
       setShowProductForm(false);
       setProductToEdit(null);
       if (productToEdit) loadProducts(productsPage);
       else if (productsPage === 1) loadProducts(1);
     } catch (error) {
-      toast.error(errorMessage(error, "Unable to save product."));
-    } finally {
-      setBusyAction("");
+      if (typeof error !== "string") toast.error(errorMessage(error, "Unable to save product."));
     }
   };
 
   const changeOrderStatus = async (orderId, status) => {
-    setBusyAction(`status-${orderId}`);
     try {
-      const response = await axiosInstance.put(`/order/admin/update/${orderId}`, { status });
-      setOrders((current) => current.map((order) => order.id === orderId
-        ? { ...order, order_status: response.data.updateOrderStatus?.order_status || status }
-        : order));
-      toast.success(response.data.message || "Order status updated.");
+      await dispatch(updateAdminOrderStatus({ orderId, status })).unwrap();
     } catch (error) {
-      toast.error(errorMessage(error, "Unable to update order status."));
+      if (typeof error !== "string") toast.error(errorMessage(error, "Unable to update order status."));
       loadOrders();
-    } finally {
-      setBusyAction("");
     }
   };
 
@@ -428,9 +418,22 @@ const AdminDashboard = () => {
           <h1 className="text-2xl font-bold">{authUser ? "Administrator access required" : "Sign in required"}</h1>
           <p className="mt-2 text-sm text-muted-foreground">{authUser ? "This dashboard is only available to administrator accounts." : "Sign in with an administrator account to manage the store."}</p>
           <div className="mt-6 flex justify-center gap-3">
-            {!authUser && <button type="button" onClick={() => dispatch(toggleAuthPopup())} className={buttonClass}>Sign in</button>}
+            {!authUser && <button type="button" onClick={() => dispatch(openAuthPopup())} className={buttonClass}>Sign in</button>}
             <Link to="/" className={subtleButtonClass}>Return to storefront</Link>
           </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (serverForbidden) {
+    return (
+      <main className="flex min-h-[70vh] items-center justify-center px-4 pb-16 pt-24">
+        <section className={`${cardClass} w-full max-w-lg p-8 text-center`}>
+          <AlertTriangle size={34} className="mx-auto mb-4 text-amber-500" />
+          <h1 className="text-2xl font-bold">Administrator access denied</h1>
+          <p className="mt-2 text-sm text-muted-foreground">The server denied access to this admin resource. Your account is not authorized to continue.</p>
+          <Link to="/" className={`${subtleButtonClass} mt-6`}>Return to storefront</Link>
         </section>
       </main>
     );
@@ -565,7 +568,7 @@ const AdminDashboard = () => {
                     {inventory.slice(0, 5).map((product) => (
                       <li key={product.id} className="flex items-center justify-between gap-4 py-3">
                         <div className="min-w-0"><p className="truncate text-sm font-medium">{product.name}</p><p className="text-xs text-muted-foreground">{product.category}</p></div>
-                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${Number(product.stock) === 0 ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-600"}`}>{product.stock === 0 ? "Out of stock" : `${product.stock} left`}</span>
+                        <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${Number(product.stock) === 0 ? "bg-red-500/10 text-red-500" : "bg-amber-500/10 text-amber-600"}`}>{Number(product.stock) === 0 ? "Out of stock" : `${product.stock} left`}</span>
                       </li>
                     ))}
                   </ul>
@@ -630,7 +633,7 @@ const AdminDashboard = () => {
 
         {section === "products" && (
           <>
-            {showProductForm && <ProductForm product={productToEdit} saving={busyAction === "save-product"} onCancel={() => { setShowProductForm(false); setProductToEdit(null); }} onSave={saveProduct} />}
+            {showProductForm && <ProductForm product={productToEdit} saving={productState.creatingProduct || productState.updatingProduct} onCancel={() => { setShowProductForm(false); setProductToEdit(null); }} onSave={saveProduct} />}
             <section className={cardClass}>
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-5">
                 <div><h2 className="text-lg font-semibold">Product catalog</h2><p className="mt-1 text-sm text-muted-foreground">{productsTotal.toLocaleString("en-IN")} products</p></div>
@@ -669,7 +672,7 @@ const AdminDashboard = () => {
               <div><h2 className="text-lg font-semibold">All orders</h2><p className="mt-1 text-sm text-muted-foreground">{orders.length} orders</p></div>
               <ShoppingBag size={20} className="text-primary" />
             </div>
-            {errors.orders ? <div role="alert" className="p-5 text-sm text-destructive">{errors.orders}<button onClick={loadOrders} className="ml-3 underline">Retry</button></div> : loading.orders ? <LoadingRows rows={6} /> : orders.length ? (
+            {errors.orders || orderState.adminOrdersError ? <div role="alert" className="p-5 text-sm text-destructive">{errors.orders || orderState.adminOrdersError}<button onClick={loadOrders} className="ml-3 underline">Retry</button></div> : (loading.orders || orderState.fetchingOrders) ? <LoadingRows rows={6} /> : orders.length ? (
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[980px] text-left text-sm">
                   <thead className="bg-secondary/50 text-xs uppercase tracking-wide text-muted-foreground"><tr><th className="px-5 py-3">Order / buyer</th><th className="px-5 py-3">Date</th><th className="px-5 py-3">Total</th><th className="px-5 py-3">Payment</th><th className="px-5 py-3">Order status</th><th className="px-5 py-3 text-right">Actions</th></tr></thead>
@@ -680,7 +683,7 @@ const AdminDashboard = () => {
                         <td className="px-5 py-4 text-muted-foreground">{formatDate(order.created_at)}</td>
                         <td className="px-5 py-4 font-semibold">{formatProductPrice(order.total_price)}</td>
                         <td className="px-5 py-4"><StatusPill status={order.payment_status || "Pending"} /></td>
-                        <td className="px-5 py-4"><select aria-label={`Order status for ${order.id}`} className={`${inputClass} w-36 py-2`} value={order.order_status} disabled={busyAction === `status-${order.id}`} onChange={(event) => changeOrderStatus(order.id, event.target.value)}>{orderStatuses.map((status) => <option key={status}>{status}</option>)}</select></td>
+                        <td className="px-5 py-4"><select aria-label={`Order status for ${order.id}`} className={`${inputClass} w-36 py-2`} value={order.order_status} disabled={orderState.updatingOrderStatus} onChange={(event) => changeOrderStatus(order.id, event.target.value)}>{orderStatuses.map((status) => <option key={status}>{status}</option>)}</select></td>
                         <td className="px-5 py-4"><div className="flex justify-end gap-1">
                           <button aria-label={`View order ${order.id}`} onClick={() => setSelectedOrder(order)} className="rounded-lg p-2 text-muted-foreground hover:bg-primary/10 hover:text-primary"><Eye size={17} /></button>
                           <button aria-label={`Delete order ${order.id}`} onClick={() => requestDelete("order", order)} className="rounded-lg p-2 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"><Trash2 size={17} /></button>
@@ -697,7 +700,11 @@ const AdminDashboard = () => {
 
       <ConfirmDialog
         dialog={confirmDialog}
-        busy={Boolean(confirmDialog && busyAction === `delete-${confirmDialog.kind}-${confirmDialog.id}`)}
+        busy={Boolean(confirmDialog && (
+          busyAction === `delete-${confirmDialog.kind}-${confirmDialog.id}` ||
+          (confirmDialog.kind === "product" && productState.deletingProduct) ||
+          (confirmDialog.kind === "order" && orderState.deletingOrder)
+        ))}
         onClose={() => setConfirmDialog(null)}
         onConfirm={confirmDelete}
       />

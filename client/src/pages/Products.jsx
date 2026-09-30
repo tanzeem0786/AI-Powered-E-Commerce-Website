@@ -6,7 +6,7 @@ import { categories } from "../data/products.js";
 import ProductCard from "../components/Products/ProductCard.jsx";
 import Pagination from "../components/Products/Pagination.jsx";
 import { fetchProducts } from "../store/slices/productSlice.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 
 const PRODUCTS_PER_PAGE = 10;
 
@@ -247,7 +247,7 @@ const Products = () => {
                 {isAuthenticationError ? (
                   <button
                     type="button"
-                    onClick={() => dispatch(toggleAuthPopup())}
+                    onClick={() => dispatch(openAuthPopup())}
                     className="mt-5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90"
                   >
                     Sign in

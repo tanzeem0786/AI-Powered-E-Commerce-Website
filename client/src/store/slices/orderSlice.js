@@ -19,6 +19,7 @@ export const placeOrder = createAsyncThunk(
         quantity: Number(item.quantity),
       }));
       const response = await axiosInstance.post("/order/new", { ...shipping, orderedItem });
+      toast.success(response.data.message || "Order created. Complete payment to confirm it.");
       return response.data;
     } catch (error) {
       const message = getErrorMessage(error);
@@ -45,6 +46,7 @@ export const fetchOrderPaymentStatus = createAsyncThunk(
       };
     } catch (error) {
       const message = getErrorMessage(error);
+      toast.error(message);
       return thunkAPI.rejectWithValue(message);
     }
   }
@@ -55,7 +57,9 @@ export const fetchMyOrders = createAsyncThunk("order/fetchMine", async (_, thunk
     const response = await axiosInstance.get("/order/orders/me");
     return response.data.myOrders;
   } catch (error) {
-    return thunkAPI.rejectWithValue(getErrorMessage(error));
+    const message = getErrorMessage(error);
+    toast.error(message);
+    return thunkAPI.rejectWithValue(message);
   }
 });
 
@@ -66,10 +70,51 @@ export const fetchOrderDetails = createAsyncThunk(
       const response = await axiosInstance.get(`/order/${orderId}`);
       return response.data.orders;
     } catch (error) {
-      return thunkAPI.rejectWithValue(getErrorMessage(error));
+      const message = getErrorMessage(error);
+      toast.error(message);
+      return thunkAPI.rejectWithValue(message);
     }
   }
 );
+
+export const fetchAdminOrders = createAsyncThunk("order/fetchAdminOrders", async (_, thunkAPI) => {
+  try {
+    const response = await axiosInstance.get("/order/admin/get-all-orders");
+    return response.data.allOrders || [];
+  } catch (error) {
+    if (error.response?.status === 404 && /no orders/i.test(error.response?.data?.message || "")) return [];
+    const message = getErrorMessage(error, "Unable to load orders.");
+    toast.error(message);
+    return thunkAPI.rejectWithValue(message);
+  }
+});
+
+export const updateAdminOrderStatus = createAsyncThunk(
+  "order/updateAdminStatus",
+  async ({ orderId, status }, thunkAPI) => {
+    try {
+      const response = await axiosInstance.put(`/order/admin/update/${orderId}`, { status });
+      toast.success(response.data.message || "Order status updated.");
+      return response.data.updateOrderStatus;
+    } catch (error) {
+      const message = getErrorMessage(error, "Unable to update order status.");
+      toast.error(message);
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
+export const deleteAdminOrder = createAsyncThunk("order/deleteAdminOrder", async (orderId, thunkAPI) => {
+  try {
+    const response = await axiosInstance.delete(`/order/admin/delete/${orderId}`);
+    toast.success(response.data.message || "Order deleted.");
+    return orderId;
+  } catch (error) {
+    const message = getErrorMessage(error, "Unable to delete order.");
+    toast.error(message);
+    return thunkAPI.rejectWithValue(message);
+  }
+});
 
 const orderSlice = createSlice({
   name: "order",
@@ -82,7 +127,15 @@ const orderSlice = createSlice({
     orderDetailsError: null,
     orderDetailsRequestId: null,
     fetchingOrders: false,
+    fetchingOrderDetails: false,
     placingOrder: false,
+    paymentProcessing: false,
+    updatingOrderStatus: false,
+    deletingOrder: false,
+    adminOrders: [],
+    adminOrdersError: null,
+    adminOrdersRequestId: null,
+    orderMutationError: null,
     checkoutError: null,
     finalPrice: null,
     orderStep: 1,
@@ -90,8 +143,12 @@ const orderSlice = createSlice({
     orderId: null,
     paymentStatus: null,
     paymentFailureReason: null,
+    fetchingPaymentStatus: false,
   },
   reducers: {
+    setPaymentProcessing(state, action) {
+      state.paymentProcessing = action.payload;
+    },
     clearCheckoutError(state) {
       state.checkoutError = null;
     },
@@ -132,23 +189,38 @@ const orderSlice = createSlice({
         state.placingOrder = false;
         state.checkoutError = action.payload || "Unable to place your order.";
       })
+      .addCase(fetchOrderPaymentStatus.pending, (state) => {
+        state.fetchingPaymentStatus = true;
+        state.paymentProcessing = true;
+      })
       .addCase(fetchOrderPaymentStatus.fulfilled, (state, action) => {
+        state.fetchingPaymentStatus = false;
+        state.paymentProcessing = false;
         state.paymentStatus = action.payload.status;
         state.paymentFailureReason = action.payload.failureReason || null;
       })
+      .addCase(fetchOrderPaymentStatus.rejected, (state, action) => {
+        state.fetchingPaymentStatus = false;
+        state.paymentProcessing = false;
+        state.orderDetailsError = action.payload || "Unable to refresh payment status.";
+      })
       .addCase(fetchMyOrders.pending, (state) => {
         state.ordersLoading = true;
+        state.fetchingOrders = true;
         state.ordersError = null;
       })
       .addCase(fetchMyOrders.fulfilled, (state, action) => {
         state.ordersLoading = false;
+        state.fetchingOrders = false;
         state.myOrders = action.payload;
       })
       .addCase(fetchMyOrders.rejected, (state, action) => {
         state.ordersLoading = false;
+        state.fetchingOrders = false;
         state.ordersError = action.payload || "Unable to load your orders.";
       })
       .addCase(fetchOrderDetails.pending, (state, action) => {
+        state.fetchingOrderDetails = true;
         state.orderDetailsLoading = true;
         state.orderDetailsError = null;
         state.orderDetailsRequestId = action.meta.requestId;
@@ -156,18 +228,61 @@ const orderSlice = createSlice({
       })
       .addCase(fetchOrderDetails.fulfilled, (state, action) => {
         if (state.orderDetailsRequestId !== action.meta.requestId) return;
+        state.fetchingOrderDetails = false;
         state.orderDetailsLoading = false;
         state.orderDetailsRequestId = null;
         state.orderDetails = action.payload;
       })
       .addCase(fetchOrderDetails.rejected, (state, action) => {
         if (state.orderDetailsRequestId !== action.meta.requestId) return;
+        state.fetchingOrderDetails = false;
         state.orderDetailsLoading = false;
         state.orderDetailsRequestId = null;
         state.orderDetailsError = action.payload || "Unable to load this order.";
+      })
+      .addCase(fetchAdminOrders.pending, (state, action) => {
+        state.fetchingOrders = true;
+        state.adminOrdersError = null;
+        state.adminOrdersRequestId = action.meta.requestId;
+      })
+      .addCase(fetchAdminOrders.fulfilled, (state, action) => {
+        if (state.adminOrdersRequestId !== action.meta.requestId) return;
+        state.fetchingOrders = false;
+        state.adminOrdersRequestId = null;
+        state.adminOrders = action.payload;
+      })
+      .addCase(fetchAdminOrders.rejected, (state, action) => {
+        if (state.adminOrdersRequestId !== action.meta.requestId) return;
+        state.fetchingOrders = false;
+        state.adminOrdersRequestId = null;
+        state.adminOrdersError = action.payload || "Unable to load orders.";
+      })
+      .addCase(updateAdminOrderStatus.pending, (state) => {
+        state.updatingOrderStatus = true;
+        state.orderMutationError = null;
+      })
+      .addCase(updateAdminOrderStatus.fulfilled, (state, action) => {
+        state.updatingOrderStatus = false;
+        state.adminOrders = state.adminOrders.map((order) => order.id === action.payload?.id ? { ...order, ...action.payload } : order);
+      })
+      .addCase(updateAdminOrderStatus.rejected, (state, action) => {
+        state.updatingOrderStatus = false;
+        state.orderMutationError = action.payload || "Unable to update order status.";
+      })
+      .addCase(deleteAdminOrder.pending, (state) => {
+        state.deletingOrder = true;
+        state.orderMutationError = null;
+      })
+      .addCase(deleteAdminOrder.fulfilled, (state, action) => {
+        state.deletingOrder = false;
+        state.adminOrders = state.adminOrders.filter((order) => order.id !== action.payload);
+      })
+      .addCase(deleteAdminOrder.rejected, (state, action) => {
+        state.deletingOrder = false;
+        state.orderMutationError = action.payload || "Unable to delete order.";
       });
   },
 });
 
-export const { clearCheckoutError, clearCheckout, finishCheckout } = orderSlice.actions;
+export const { clearCheckoutError, clearCheckout, finishCheckout, setPaymentProcessing } = orderSlice.actions;
 export default orderSlice.reducer;

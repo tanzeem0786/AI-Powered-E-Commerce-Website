@@ -28,13 +28,23 @@ import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
-import { getUser } from "./store/slices/authSlice.js";
+import { clearAuthSession, getUser } from "./store/slices/authSlice.js";
+import { openAuthPopup } from "./store/slices/popupSlice.js";
 
 const App = () => {
   const dispatch = useDispatch();
 
   useEffect(() => {
     dispatch(getUser());
+  }, [dispatch]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      dispatch(clearAuthSession());
+      dispatch(openAuthPopup());
+    };
+    window.addEventListener("app:unauthorized", handleUnauthorized);
+    return () => window.removeEventListener("app:unauthorized", handleUnauthorized);
   }, [dispatch]);
 
   return (

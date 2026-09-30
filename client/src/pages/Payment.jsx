@@ -8,7 +8,7 @@ import { toast } from "react-toastify";
 import PaymentForm from "../components/PaymentForm.jsx";
 import { fetchOrderPaymentStatus, finishCheckout, placeOrder, clearCheckoutError } from "../store/slices/orderSlice.js";
 import { formatProductPrice } from "../components/Products/productUtils.js";
-import { toggleAuthPopup } from "../store/slices/popupSlice.js";
+import { openAuthPopup } from "../store/slices/popupSlice.js";
 import { clearCart } from "../store/slices/cartSlice.js";
 
 const stripePromise = import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY
@@ -117,7 +117,7 @@ const Payment = () => {
       if (!isActive) return;
 
       if (fetchOrderPaymentStatus.fulfilled.match(result)) {
-        const status = String(result.payload || "").toLowerCase();
+        const status = String(result.payload.status || "").toLowerCase();
         if (status === "paid") {
           dispatch(clearCart());
           dispatch(finishCheckout());
@@ -170,7 +170,7 @@ const Payment = () => {
     }
     if (!authUser) {
       setFormError("Sign in to continue with checkout.");
-      dispatch(toggleAuthPopup());
+      dispatch(openAuthPopup());
       return;
     }
     if (!cartIsValid) {
@@ -187,7 +187,7 @@ const Payment = () => {
     setFormError("");
     if (!authUser) {
       setFormError("Sign in to continue with checkout.");
-      dispatch(toggleAuthPopup());
+      dispatch(openAuthPopup());
       return;
     }
     if (!cartIsValid) {

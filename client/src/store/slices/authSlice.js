@@ -104,89 +104,130 @@ const authSlice = createSlice({
   name: "auth",
   initialState: {
     authUser: null,
+    errors: {},
     isSigningUp: false,
     isLoggingIn: false,
+    isLoggingOut: false,
     isUpdatingProfile: false,
     isUpdatingPassword: false,
     isRequestingForToken: false,
     isCheckingAuth: true,
   },
-  reducers: {},
+  reducers: {
+    clearAuthSession(state) {
+      state.authUser = null;
+      state.isCheckingAuth = false;
+      state.errors = {};
+    },
+    clearAuthError(state, action) {
+      if (action.payload) delete state.errors[action.payload];
+      else state.errors = {};
+    },
+  },
   extraReducers: (builder) => {
     builder
       .addCase(register.pending, (state) => {
         state.isSigningUp = true;
+        delete state.errors.register;
       })
       .addCase(register.fulfilled, (state, action) => {
         state.isSigningUp = false;
         state.authUser = action.payload;
+        delete state.errors.register;
       })
-      .addCase(register.rejected, (state) => {
+      .addCase(register.rejected, (state, action) => {
         state.isSigningUp = false;
+        state.errors.register = action.payload || action.error.message;
       })
       .addCase(login.pending, (state) => {
         state.isLoggingIn = true;
+        delete state.errors.login;
       })
       .addCase(login.fulfilled, (state, action) => {
         state.isLoggingIn = false;
         state.authUser = action.payload;
+        delete state.errors.login;
       })
-      .addCase(login.rejected, (state) => {
+      .addCase(login.rejected, (state, action) => {
         state.isLoggingIn = false;
+        state.errors.login = action.payload || action.error.message;
       })
       .addCase(getUser.pending, (state) => {
         state.isCheckingAuth = true;
+        delete state.errors.session;
       })
       .addCase(getUser.fulfilled, (state, action) => {
         state.isCheckingAuth = false;
         state.authUser = action.payload;
+        delete state.errors.session;
       })
-      .addCase(getUser.rejected, (state) => {
+      .addCase(getUser.rejected, (state, action) => {
         state.isCheckingAuth = false;
         state.authUser = null;
+        state.errors.session = action.payload || action.error.message;
       })
       .addCase(logout.fulfilled, (state) => {
+        state.isLoggingOut = false;
         state.authUser = null;
+      })
+      .addCase(logout.pending, (state) => {
+        state.isLoggingOut = true;
+        delete state.errors.logout;
+      })
+      .addCase(logout.rejected, (state, action) => {
+        state.isLoggingOut = false;
+        state.errors.logout = action.payload || action.error.message;
       })
       .addCase(forgotPassword.pending, (state) => {
         state.isRequestingForToken = true;
+        delete state.errors.forgotPassword;
       })
       .addCase(forgotPassword.fulfilled, (state) => {
         state.isRequestingForToken = false;
       })
-      .addCase(forgotPassword.rejected, (state) => {
+      .addCase(forgotPassword.rejected, (state, action) => {
         state.isRequestingForToken = false;
+        state.errors.forgotPassword = action.payload || action.error.message;
       })
       .addCase(resetPassword.pending, (state) => {
         state.isUpdatingPassword = true;
+        delete state.errors.resetPassword;
       })
       .addCase(resetPassword.fulfilled, (state, action) => {
         state.isUpdatingPassword = false;
         state.authUser = action.payload;
+        delete state.errors.resetPassword;
       })
-      .addCase(resetPassword.rejected, (state) => {
+      .addCase(resetPassword.rejected, (state, action) => {
         state.isUpdatingPassword = false;
+        state.errors.resetPassword = action.payload || action.error.message;
       })
       .addCase(updatePassword.pending, (state) => {
         state.isUpdatingPassword = true;
+        delete state.errors.updatePassword;
       })
       .addCase(updatePassword.fulfilled, (state) => {
         state.isUpdatingPassword = false;
       })
-      .addCase(updatePassword.rejected, (state) => {
+      .addCase(updatePassword.rejected, (state, action) => {
         state.isUpdatingPassword = false;
+        state.errors.updatePassword = action.payload || action.error.message;
       })
       .addCase(updateProfile.pending, (state) => {
         state.isUpdatingProfile = true;
+        delete state.errors.updateProfile;
       })
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.isUpdatingProfile = false;
         state.authUser = action.payload;
+        delete state.errors.updateProfile;
       })
-      .addCase(updateProfile.rejected, (state) => {
+      .addCase(updateProfile.rejected, (state, action) => {
         state.isUpdatingProfile = false;
+        state.errors.updateProfile = action.payload || action.error.message;
       });
   },
 });
 
+export const { clearAuthSession, clearAuthError } = authSlice.actions;
 export default authSlice.reducer;
