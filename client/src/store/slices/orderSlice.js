@@ -50,10 +50,37 @@ export const fetchOrderPaymentStatus = createAsyncThunk(
   }
 );
 
+export const fetchMyOrders = createAsyncThunk("order/fetchMine", async (_, thunkAPI) => {
+  try {
+    const response = await axiosInstance.get("/order/orders/me");
+    return response.data.myOrders;
+  } catch (error) {
+    return thunkAPI.rejectWithValue(getErrorMessage(error));
+  }
+});
+
+export const fetchOrderDetails = createAsyncThunk(
+  "order/fetchDetails",
+  async (orderId, thunkAPI) => {
+    try {
+      const response = await axiosInstance.get(`/order/${orderId}`);
+      return response.data.orders;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(getErrorMessage(error));
+    }
+  }
+);
+
 const orderSlice = createSlice({
   name: "order",
   initialState: {
     myOrders: [],
+    ordersLoading: false,
+    ordersError: null,
+    orderDetails: null,
+    orderDetailsLoading: false,
+    orderDetailsError: null,
+    orderDetailsRequestId: null,
     fetchingOrders: false,
     placingOrder: false,
     checkoutError: null,
@@ -108,6 +135,36 @@ const orderSlice = createSlice({
       .addCase(fetchOrderPaymentStatus.fulfilled, (state, action) => {
         state.paymentStatus = action.payload.status;
         state.paymentFailureReason = action.payload.failureReason || null;
+      })
+      .addCase(fetchMyOrders.pending, (state) => {
+        state.ordersLoading = true;
+        state.ordersError = null;
+      })
+      .addCase(fetchMyOrders.fulfilled, (state, action) => {
+        state.ordersLoading = false;
+        state.myOrders = action.payload;
+      })
+      .addCase(fetchMyOrders.rejected, (state, action) => {
+        state.ordersLoading = false;
+        state.ordersError = action.payload || "Unable to load your orders.";
+      })
+      .addCase(fetchOrderDetails.pending, (state, action) => {
+        state.orderDetailsLoading = true;
+        state.orderDetailsError = null;
+        state.orderDetailsRequestId = action.meta.requestId;
+        state.orderDetails = null;
+      })
+      .addCase(fetchOrderDetails.fulfilled, (state, action) => {
+        if (state.orderDetailsRequestId !== action.meta.requestId) return;
+        state.orderDetailsLoading = false;
+        state.orderDetailsRequestId = null;
+        state.orderDetails = action.payload;
+      })
+      .addCase(fetchOrderDetails.rejected, (state, action) => {
+        if (state.orderDetailsRequestId !== action.meta.requestId) return;
+        state.orderDetailsLoading = false;
+        state.orderDetailsRequestId = null;
+        state.orderDetailsError = action.payload || "Unable to load this order.";
       });
   },
 });

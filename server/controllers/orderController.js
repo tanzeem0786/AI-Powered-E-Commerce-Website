@@ -140,7 +140,9 @@ export const fetchSingleOrder = catchAsyncErrors(async (req, res, next) => {
                                 'order_id', oi.order_id,
                                 'product_id', oi.product_id,
                                 'quantity', oi.quantity,
-                                'price', oi.price
+                                'price', oi.price,
+                                'image', oi.image,
+                                'title', oi.title
                             )
                         ) FILTER (WHERE oi.id IS NOT NULL), '[]'
                     ) AS order_items,
@@ -201,11 +203,14 @@ export const fetchMyOrders = catchAsyncErrors(async (req, res, next) => {
                         'address', s.address,
                         'pincode', s.pincode,
                         'phone', s.phone
-                    ) AS shipping_info FROM orders o
+                    ) AS shipping_info,
+                    p.payment_status AS payment_status,
+                    p.failure_reason AS payment_failure_reason FROM orders o
                     LEFT JOIN order_items oi ON o.id = oi.order_id
                     LEFT JOIN shipping_info s ON o.id = s.order_id
+                    LEFT JOIN payments p ON p.order_id = o.id
                     WHERE o.buyer_id = $1
-                    GROUP BY o.id, s.id
+                    GROUP BY o.id, s.id, p.id
                     `,
         [req.user.id]);
 

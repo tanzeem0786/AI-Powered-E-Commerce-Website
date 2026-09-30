@@ -19,6 +19,7 @@ import Products from "./pages/Products";
 import ProductDetail from "./pages/ProductDetail";
 import Cart from "./pages/Cart";
 import Orders from "./pages/Orders";
+import OrderDetails from "./pages/OrderDetails";
 import Payment from "./pages/Payment";
 import About from "./pages/About";
 import FAQ from "./pages/FAQ";
@@ -52,6 +53,7 @@ const App = () => {
               <Route path="/product/:id" element={<ProductDetail />} />
               <Route path="/cart" element={<Cart />} />
               <Route path="/orders" element={<Orders />} />
+              <Route path="/orders/:orderId" element={<OrderDetails />} />
               <Route path="/payment" element={<Payment />} />
               <Route path="/about" element={<About />} />
               <Route path="/faq" element={<FAQ />} />
