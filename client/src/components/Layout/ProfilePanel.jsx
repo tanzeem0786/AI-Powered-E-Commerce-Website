@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { X, LogOut, Upload, Eye, EyeOff, User, Mail, Lock } from "lucide-react";
 import { useDispatch, useSelector } from "react-redux";
 import { toast } from "react-toastify";
-import { logout, updateProfile, updatePassword } from "../../store/slices/authSlice";
-import { toggleAuthPopup } from "../../store/slices/popupSlice";
+import { logout, updateProfile, updatePassword } from "../../store/slices/authSlice.js";
+import { toggleAuthPopup } from "../../store/slices/popupSlice.js";
 import { Link } from "react-router-dom";
 
 const ProfilePanel = () => {
@@ -195,7 +195,7 @@ const ProfilePanel = () => {
               <div className="text-center">
                 <div className="w-20 h-20 rounded-full glass-card mx-auto mb-4 overflow-hidden flex items-center justify-center">
                   {authUser.avatar ? (
-                    <img src={authUser.avatar} alt={authUser.name} className="w-full h-full object-cover" />
+                    <img src={authUser.avatar.url} alt={authUser.name} className="w-full h-full object-cover rounded-full" />
                   ) : (
                     <User className="w-10 h-10 text-primary" />
                   )}
@@ -209,7 +209,7 @@ const ProfilePanel = () => {
               <div className="space-y-3 glass-card p-4 rounded-lg">
                 <div className="flex items-center space-x-2 text-sm">
                   <Mail className="w-4 h-4 text-primary" />
-                  <span className="text-foreground/70">Email:</span>
+                  {/* <span className="text-foreground/70">Email:</span> */}
                   <span className="text-foreground font-medium">{authUser.email}</span>
                 </div>
                 {authUser.phone && (
@@ -226,7 +226,9 @@ const ProfilePanel = () => {
                 )}
                 {authUser.role && (
                   <div className="flex items-center space-x-2 text-sm">
-                    <span className="text-foreground/70">Role:</span>
+                  <User className="w-4 h-4 text-primary" />
+
+                    {/* <span className="text-foreground/70">Role:</span> */}
                     <span className="text-foreground font-medium capitalize">{authUser.role}</span>
                   </div>
                 )}
