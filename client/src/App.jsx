@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { useDispatch } from "react-redux";
 import { ThemeProvider } from "./contexts/ThemeContext";
@@ -27,6 +27,7 @@ import FAQ from "./pages/FAQ";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
+const AdminDashboard = lazy(() => import("./pages/AdminDashboard.jsx"));
 import { getUser } from "./store/slices/authSlice.js";
 
 const App = () => {
@@ -56,6 +57,7 @@ const App = () => {
               <Route path="/cart" element={<Cart />} />
               <Route path="/orders" element={<Orders />} />
               <Route path="/orders/:orderId" element={<OrderDetails />} />
+              <Route path="/admin" element={<Suspense fallback={<main className="min-h-[70vh] px-4 pb-16 pt-28"><div className="mx-auto max-w-7xl animate-pulse space-y-5"><div className="h-12 w-1/3 rounded-xl bg-secondary" /><div className="h-72 rounded-2xl bg-secondary" /></div></main>}><AdminDashboard /></Suspense>} />
               <Route path="/payment" element={<Payment />} />
               <Route path="/about" element={<About />} />
               <Route path="/faq" element={<FAQ />} />

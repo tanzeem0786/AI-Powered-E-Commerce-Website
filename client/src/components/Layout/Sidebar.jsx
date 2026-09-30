@@ -8,6 +8,7 @@ import {
   ShoppingCart,
   List,
   Phone,
+  ShieldCheck,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useDispatch, useSelector } from "react-redux";
@@ -24,6 +25,7 @@ const Sidebar = () => {
     { name: "Contact", icon: Phone, path: "/contact" },
     { name: "Cart", icon: ShoppingCart, path: "/cart" },
     authUser && { name: "My Orders", icon: List, path: "/orders" },
+    authUser?.role === "Admin" && { name: "Admin Dashboard", icon: ShieldCheck, path: "/admin" },
   ];
   const {isSidebarOpen} = useSelector(state => state.popup)
   if(!isSidebarOpen) return null;

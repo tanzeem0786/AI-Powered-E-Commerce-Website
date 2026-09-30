@@ -14,7 +14,7 @@ export const getAllUsers = catchAsyncErrors(async(req, res, next) => {
     const totalUsers = parseInt(totalUsersResult.rows[0].count);
     const offset = (page - 1) * 10;
     const users = await database.query(
-        "SELECT * FROM users WHERE role = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
+        "SELECT id, name, email, role, avatar, created_at FROM users WHERE role = $1 ORDER BY created_at DESC LIMIT $2 OFFSET $3",
         ["User", 10, offset]
     );
     res.status(200).json({
@@ -61,7 +61,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     const previousMonthEnd = currentMonthStart;
 
     const totalRevenueAllTimeQuery = await database.query(
-        "SELECT SUM(total_price) FROM orders"
+        "SELECT SUM(o.total_price) FROM orders o JOIN payments p ON p.order_id = o.id WHERE p.payment_status = 'Paid'"
     );
     const totalRevenueAllTime = parseFloat(totalRevenueAllTimeQuery.rows[0].sum || 0);
 
@@ -88,14 +88,14 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
 
     // Today's Revenue
     const todayRevenueQuery = await database.query(
-        "SELECT SUM(total_price) FROM orders WHERE created_at::date = $1",
+        "SELECT SUM(o.total_price) FROM orders o JOIN payments p ON p.order_id = o.id WHERE p.payment_status = 'Paid' AND o.created_at::date = $1",
         [todayDate]
     );
     const todayRevenue = parseFloat(todayRevenueQuery.rows[0].sum || 0);
 
     // Yesterday's Revenue
     const yesterdayRevenueQuery = await database.query(
-       "SELECT SUM(total_price) FROM orders WHERE created_at::date = $1",
+       "SELECT SUM(o.total_price) FROM orders o JOIN payments p ON p.order_id = o.id WHERE p.payment_status = 'Paid' AND o.created_at::date = $1",
         [yesterdayDate]
     );
     const yesterdayRevenue = parseFloat(yesterdayRevenueQuery.rows[0].sum || 0);
@@ -103,10 +103,11 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     // Monthly Sales for Line Chart
     const monthlySalesQuery = await database.query(`
         SELECT 
-        TO_CHAR(created_at, 'Mon YYYY') AS month,
-        DATE_TRUNC('month', created_at) as date,
-        SUM(total_price) as totalSales
-        FROM orders
+        TO_CHAR(o.created_at, 'Mon YYYY') AS month,
+        DATE_TRUNC('month', o.created_at) as date,
+        SUM(o.total_price) as totalSales
+        FROM orders o
+        JOIN payments p ON p.order_id = o.id AND p.payment_status = 'Paid'
         GROUP BY month, date
         ORDER BY date ASC
         `);
@@ -124,6 +125,8 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
         p.ratings,
         SUM(oi.quantity) AS total_sold
         FROM order_items oi
+        JOIN orders o ON o.id = oi.order_id
+        JOIN payments pay ON pay.order_id = o.id AND pay.payment_status = 'Paid'
         JOIN products p ON p.id = oi.product_id
         GROUp BY p.name, p.images, p.category, p.ratings
         ORDER BY total_sold DESC
@@ -134,23 +137,26 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     // Total Sales of Current Month
     const currentMonthSalesQuery = await database.query(
         `SELECT SUM(total_price) AS total
-        FROM orders
-        WHERE created_at >= $1 AND created_at < $2`,
+        FROM orders o
+        JOIN payments p ON p.order_id = o.id AND p.payment_status = 'Paid'
+        WHERE o.created_at >= $1 AND o.created_at < $2`,
         [currentMonthStart, currentMonthEnd]
     );
     const currentMonthSales = parseFloat(currentMonthSalesQuery.rows[0].total) || 0;
 
     // Products with Stock Less than or Equal to 5
     const lowStockProductQuery = await database.query(
-        "SELECT name, stock FROM products WHERE stock <= 5"
+        "SELECT id, name, category, stock FROM products WHERE stock <= 5 ORDER BY stock ASC, name ASC"
     );
     const lowStockProducts = lowStockProductQuery.rows;
+    const outOfStockProducts = lowStockProducts.filter((product) => Number(product.stock) === 0);
 
     // Revenuew Growth Rate(%)
     const lastMonthRevenueQuery = await database.query(
         `SELECT SUM(total_price) AS total
-        FROM orders 
-        WHERE created_at >= $1 AND created_at < $2`,
+        FROM orders o
+        JOIN payments p ON p.order_id = o.id AND p.payment_status = 'Paid'
+        WHERE o.created_at >= $1 AND o.created_at < $2`,
         [previousMonthStart, previousMonthEnd]
     );
     const lastMonthRevenue = parseFloat(lastMonthRevenueQuery.rows[0].total) || 0;
@@ -159,6 +165,8 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
     if(lastMonthRevenue > 0) {
         const growthRate = ((currentMonthSales - lastMonthRevenue) / lastMonthRevenue) * 100;
         revenueGrowth = `${growthRate >= 0 ? "+" : ""}${growthRate.toFixed(2)}%`;
+    } else if (currentMonthSales > 0) {
+        revenueGrowth = "New";
     }
 
     // New Users this Month
@@ -184,6 +192,7 @@ export const dashboardStats = catchAsyncErrors(async(req, res, next) => {
         currentMonthSales: currentMonthSales / 100,
         topSellingProducts,
         lowStockProducts,
+        outOfStockProducts,
         revenueGrowth,
         newUsersThisMonth,
     });

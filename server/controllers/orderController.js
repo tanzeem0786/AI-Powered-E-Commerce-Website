@@ -236,6 +236,9 @@ json_build_object(
 'title', oi.title
 )
 ) FILTER (WHERE oi.id IS NOT NULL), '[]' ) AS order_items,
+u.name AS buyer_name,
+u.email AS buyer_email,
+COALESCE(pay.payment_status, 'Pending') AS payment_status,
 json_build_object(
 'full_name', s.full_name,
 'state', s.state,
@@ -248,7 +251,9 @@ json_build_object(
 FROM orders o
 LEFT JOIN order_items oi ON o.id = oi.order_id
 LEFT JOIN shipping_info s ON o.id = s.order_id
-GROUP BY o.id, s.id`
+LEFT JOIN users u ON u.id = o.buyer_id
+LEFT JOIN payments pay ON pay.order_id = o.id
+GROUP BY o.id, s.id, u.id, pay.id`
     )
 if(result.rows.length === 0 ) {
     return next(new ErrorHandler("No Orders Found!", 404));
