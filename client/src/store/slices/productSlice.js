@@ -1,4 +1,5 @@
 import { createAsyncThunk, createSlice } from "@reduxjs/toolkit";
+import { toast } from "react-toastify";
 import { axiosInstance } from "../../lib/axios";
 
 const getErrorMessage = (error, fallback) =>
@@ -24,6 +25,36 @@ export const fetchSingleProduct = createAsyncThunk(
       return response.data.product;
     } catch (error) {
       return thunkAPI.rejectWithValue(getErrorMessage(error, "Unable to load this product."));
+    }
+  }
+);
+
+export const submitProductReview = createAsyncThunk(
+  "product/submitReview",
+  async ({ productId, rating, comment }, thunkAPI) => {
+    try {
+      const response = await axiosInstance.put(`/product/post-new/review/${productId}`, { rating, comment });
+      toast.success(response.data.message);
+      return response.data;
+    } catch (error) {
+      const message = getErrorMessage(error, "Unable to submit your review.");
+      toast.error(message);
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
+export const deleteProductReview = createAsyncThunk(
+  "product/deleteReview",
+  async (productId, thunkAPI) => {
+    try {
+      const response = await axiosInstance.delete(`/product/delete/review/${productId}`);
+      toast.success(response.data.message);
+      return response.data;
+    } catch (error) {
+      const message = getErrorMessage(error, "Unable to delete your review.");
+      toast.error(message);
+      return thunkAPI.rejectWithValue(message);
     }
   }
 );
@@ -87,6 +118,24 @@ const productSlice = createSlice({
         state.detailLoading = false;
         state.detailRequestId = null;
         state.detailError = action.payload || "Unable to load this product.";
+      })
+      .addCase(submitProductReview.pending, (state) => {
+        state.isPostingReview = true;
+      })
+      .addCase(submitProductReview.fulfilled, (state) => {
+        state.isPostingReview = false;
+      })
+      .addCase(submitProductReview.rejected, (state) => {
+        state.isPostingReview = false;
+      })
+      .addCase(deleteProductReview.pending, (state) => {
+        state.isReviewDeleting = true;
+      })
+      .addCase(deleteProductReview.fulfilled, (state) => {
+        state.isReviewDeleting = false;
+      })
+      .addCase(deleteProductReview.rejected, (state) => {
+        state.isReviewDeleting = false;
       });
   },
 });

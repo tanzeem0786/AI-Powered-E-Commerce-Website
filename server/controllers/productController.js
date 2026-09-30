@@ -227,10 +227,32 @@ export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
     if (result.rows.length === 0) {
         return next(new ErrorHandler("Product Not Found!", 404));
     }
+    const purchaseStatus = await database.query(
+        `SELECT
+            EXISTS (
+                SELECT 1
+                FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                WHERE o.buyer_id = $1 AND oi.product_id = $2
+            ) AS has_purchased,
+            EXISTS (
+                SELECT 1
+                FROM order_items oi
+                JOIN orders o ON o.id = oi.order_id
+                JOIN payments p ON p.order_id = o.id
+                WHERE o.buyer_id = $1
+                  AND oi.product_id = $2
+                  AND p.payment_status = 'Paid'
+            ) AS has_paid_purchase`,
+        [req.user.id, productId]
+    );
     res.status(200).json({
         success: true,
         message: "Product Fetched Successfully.",
-        product: result.rows[0],
+        product: {
+            ...result.rows[0],
+            reviewEligibility: purchaseStatus.rows[0],
+        },
     })
 });
 
@@ -238,7 +260,8 @@ export const fetchSingleProduct = catchAsyncErrors(async (req, res, next) => {
 export const postProductReview = catchAsyncErrors(async (req, res, next) => {
     const { productId } = req.params;
     const { rating, comment } = req.body;
-    if (rating === undefined || rating === null || !comment?.trim() || Number(rating) < 0 || Number(rating) > 5) {
+    const numericRating = Number(rating);
+    if (rating === undefined || rating === null || rating === "" || !Number.isFinite(numericRating) || numericRating < 0 || numericRating > 5 || !comment?.trim()) {
         return next(new ErrorHandler("Please Provide Rating and Comment!", 400));
     }
 
@@ -277,16 +300,16 @@ export const postProductReview = catchAsyncErrors(async (req, res, next) => {
     if (isAlreadyReviewed.rows.length > 0) {
         review = await database.query(
             "UPDATE reviews SET rating = $1, comment = $2 WHERE product_id = $3 AND user_id = $4 RETURNING *",
-            [rating, comment, productId, req.user.id]
+            [numericRating, comment.trim(), productId, req.user.id]
         );
     } else {
         review = await database.query(
             "INSERT INTO reviews (product_id, user_id, rating, comment) VALUES ($1, $2, $3, $4) RETURNING *",
-            [productId, req.user.id, rating, comment]
+            [productId, req.user.id, numericRating, comment.trim()]
         );
     }
     const allReviews = await database.query(
-        "SELECT AVG(rating) AS avg_rating FROM reviews WHERE product_id = $1",
+        "SELECT COALESCE(AVG(rating), 0) AS avg_rating FROM reviews WHERE product_id = $1",
         [productId]
     );
     const newAvgRating = allReviews.rows[0].avg_rating;
@@ -315,7 +338,7 @@ export const deleteReview = catchAsyncErrors(async (req, res, next) => {
     }
 
     const allReviews = await database.query(
-        "SELECT AVG(rating) AS avg_rating FROM reviews WHERE product_id = $1",
+        "SELECT COALESCE(AVG(rating), 0) AS avg_rating FROM reviews WHERE product_id = $1",
         [productId]
     );
     const newAvgRating = allReviews.rows[0].avg_rating;
