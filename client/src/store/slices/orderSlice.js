@@ -5,25 +5,34 @@ import { axiosInstance } from "../../lib/axios";
 const getErrorMessage = (error) =>
   error.response?.data?.message || error.message || "Unable to place your order.";
 
-export const placeOrder = createAsyncThunk("order/place", async (shipping, thunkAPI) => {
-  const cart = thunkAPI.getState().cart.cart;
-  try {
-    const orderedItem = cart.map((item) => ({
-      product: {
-        id: item.id,
-        name: item.name,
-        images: item.images,
-      },
-      quantity: Number(item.quantity),
-    }));
-    const response = await axiosInstance.post("/order/new", { ...shipping, orderedItem });
-    return response.data;
-  } catch (error) {
-    const message = getErrorMessage(error);
-    toast.error(message);
-    return thunkAPI.rejectWithValue(message);
+export const placeOrder = createAsyncThunk(
+  "order/place",
+  async (shipping, thunkAPI) => {
+    const cart = thunkAPI.getState().cart.cart;
+    try {
+      const orderedItem = cart.map((item) => ({
+        product: {
+          id: item.id,
+          name: item.name,
+          images: item.images,
+        },
+        quantity: Number(item.quantity),
+      }));
+      const response = await axiosInstance.post("/order/new", { ...shipping, orderedItem });
+      return response.data;
+    } catch (error) {
+      const message = getErrorMessage(error);
+      toast.error(message);
+      return thunkAPI.rejectWithValue(message);
+    }
+  },
+  {
+    condition: (_, { getState }) => {
+      const { placingOrder, paymentIntent } = getState().order;
+      return !placingOrder && !paymentIntent;
+    },
   }
-});
+);
 
 const orderSlice = createSlice({
   name: "order",
@@ -45,6 +54,13 @@ const orderSlice = createSlice({
       state.finalPrice = null;
       state.paymentIntent = "";
       state.placingOrder = false;
+      state.orderStep = 1;
+    },
+    finishCheckout(state) {
+      state.checkoutError = null;
+      state.paymentIntent = "";
+      state.placingOrder = false;
+      state.orderStep = 6;
     },
   },
   extraReducers: (builder) => {
@@ -65,5 +81,5 @@ const orderSlice = createSlice({
   },
 });
 
-export const { clearCheckoutError, clearCheckout } = orderSlice.actions;
+export const { clearCheckoutError, clearCheckout, finishCheckout } = orderSlice.actions;
 export default orderSlice.reducer;

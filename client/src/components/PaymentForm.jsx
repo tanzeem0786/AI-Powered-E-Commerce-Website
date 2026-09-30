@@ -1,21 +1,22 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { CardElement, useElements, useStripe } from "@stripe/react-stripe-js";
 import { useDispatch, useSelector } from "react-redux";
 import { CreditCard, LockKeyhole } from "lucide-react";
 import { toast } from "react-toastify";
 import { clearCart } from "../store/slices/cartSlice.js";
-import { clearCheckout } from "../store/slices/orderSlice.js";
 
-const PaymentForm = ({ onPaymentComplete }) => {
+const PaymentForm = ({ onPaymentComplete, onPaymentStatus }) => {
   const stripe = useStripe();
   const elements = useElements();
   const dispatch = useDispatch();
   const paymentIntent = useSelector((state) => state.order.paymentIntent);
   const [isPaying, setIsPaying] = useState(false);
   const [paymentError, setPaymentError] = useState("");
+  const paymentLock = useRef(false);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
+    if (paymentLock.current) return;
     setPaymentError("");
 
     if (!stripe || !elements) {
@@ -28,7 +29,10 @@ const PaymentForm = ({ onPaymentComplete }) => {
       return;
     }
 
+    paymentLock.current = true;
     setIsPaying(true);
+    onPaymentStatus("processing");
+    let paymentSucceeded = false;
     try {
       const result = await stripe.confirmCardPayment(
         paymentIntent,
@@ -36,21 +40,27 @@ const PaymentForm = ({ onPaymentComplete }) => {
       );
       if (result.error) {
         setPaymentError(result.error.message || "Your payment could not be completed.");
+        onPaymentStatus("failed");
         return;
       }
       if (result.paymentIntent?.status !== "succeeded") {
         setPaymentError("Payment is not complete yet. Please follow the payment confirmation steps.");
+        onPaymentStatus("failed");
         return;
       }
 
+      paymentSucceeded = true;
+      onPaymentStatus("succeeded");
       toast.success("Payment successful.");
       dispatch(clearCart());
-      dispatch(clearCheckout());
       onPaymentComplete();
     } catch (error) {
       setPaymentError(error.message || "Payment failed. Please try again.");
+      onPaymentStatus("failed");
     } finally {
+      paymentLock.current = false;
       setIsPaying(false);
+      if (!paymentSucceeded) onPaymentStatus("failed");
     }
   };
 

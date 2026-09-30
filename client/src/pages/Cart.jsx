@@ -112,8 +112,10 @@ const Cart = () => {
             {cart.map((item) => {
               const stock = Number(item.stock) || 0;
               const quantityInvalid = !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1;
+              const productIdInvalid = !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id || "");
+              const priceInvalid = !Number.isFinite(Number(item.price)) || Number(item.price) <= 0;
               const quantityExceedsStock = Number(item.quantity) > stock;
-              const staleOrUnavailable = stock <= 0 || quantityInvalid;
+              const staleOrUnavailable = stock <= 0 || quantityInvalid || productIdInvalid || priceInvalid;
 
               return (
                 <article
@@ -157,6 +159,8 @@ const Cart = () => {
                     )}
                     {item.availabilityError && <p className="mt-1 text-xs font-medium text-destructive">{item.availabilityError}</p>}
                     {quantityInvalid && <p className="mt-1 text-xs font-medium text-destructive">This cart quantity is invalid.</p>}
+                    {productIdInvalid && <p className="mt-1 text-xs font-medium text-destructive">This product reference is invalid. Remove this item.</p>}
+                    {priceInvalid && <p className="mt-1 text-xs font-medium text-destructive">This item has an invalid price. Refresh or remove it.</p>}
                   </div>
 
                   <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end">
@@ -237,7 +241,15 @@ const Cart = () => {
             <button
               type="button"
               onClick={handleCheckout}
-              disabled={cart.some((item) => Number(item.stock) <= 0 || !Number.isInteger(Number(item.quantity)) || Number(item.quantity) < 1 || Number(item.quantity) > Number(item.stock))}
+              disabled={cart.some((item) =>
+                Number(item.stock) <= 0 ||
+                !Number.isInteger(Number(item.quantity)) ||
+                Number(item.quantity) < 1 ||
+                Number(item.quantity) > Number(item.stock) ||
+                !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id || "") ||
+                !Number.isFinite(Number(item.price)) ||
+                Number(item.price) <= 0
+              )}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 font-semibold text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Proceed to checkout
